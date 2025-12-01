@@ -10,11 +10,9 @@ import os # 기본 OS 모듈 (여기서는 사용되지 않음)
 
 # --- 한글 폰트 설정 함수 정의 ---
 def set_korean_font(): # 한글 폰트 설정 메인 함수
-    """그래프에서 한글 깨짐을 방지하고 폰트를 설정하는 메인 함수야."""
     
     # 폰트 이름을 찾는 함수
     def find_font_name(): # 폰트 이름 검색 도우미 함수
-        """시스템에 설치된 한글 폰트 이름을 찾아서 돌려줘."""
         
         # 컴퓨터에 설치된 폰트 목록 확인
         font_list = [f.name for f in fm.fontManager.ttflist] # 폰트 이름 리스트 추출
@@ -50,7 +48,6 @@ font_prop = set_korean_font() # 폰트 설정 함수 실행
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
 
 def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
-    """주어진 '측정소 이름'의 미세먼지 데이터를 API로 요청하고 받아오는 함수."""
     URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty" # API 엔드포인트 URL
     params = { # API 요청에 필요한 파라미터 설정
         'serviceKey': API_KEY, 
