@@ -37,7 +37,17 @@ def parse_pm(items, key='pm10Value'):
             v = float(val)
         except:
             continue
-        times.append(datetime.strptime(t, "%Y-%m-%d %H:%M"))
+        # datetime 변환 시도
+        dt = None
+        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y%m%d%H%M"):
+            try:
+                dt = datetime.strptime(t, fmt)
+                break
+            except:
+                continue
+        if dt is None:
+            continue  # 변환 불가 시 스킵
+        times.append(dt)
         values.append(v)
     return times[::-1], values[::-1]
 
