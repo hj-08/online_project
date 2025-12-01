@@ -9,14 +9,16 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 
 import matplotlib.font_manager as fm
+# 폰트 리스트에서 한글 폰트 이름 찾기
+font_list = [f.name for f in fm.fontManager.ttflist]
+if "Malgun Gothic" in font_list:
+    plt.rcParams['font.family'] = "Malgun Gothic"
+else:
+    # fallback
+    plt.rcParams['font.family'] = "DejaVu Sans"
 
-# 한글 폰트 설정 (환경에 맞게 경로 조정 필요)
-font_path = "C:/Windows/Fonts/malgun.ttf"  # 윈도우라면 이 경로 사용
-font_prop = fm.FontProperties(fname=font_path).get_name()
-plt.rcParams['font.family'] = font_prop
 plt.rcParams['axes.unicode_minus'] = False
 
-# 나머지 import 및 코드 이어서 작성
 
 
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e"
