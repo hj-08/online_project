@@ -9,15 +9,26 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 
 import matplotlib.font_manager as fm
-# 폰트 리스트에서 한글 폰트 이름 찾기
+
+# 위에서 설정한 한글 폰트 이름 가져오기
 font_list = [f.name for f in fm.fontManager.ttflist]
 if "Malgun Gothic" in font_list:
-    plt.rcParams['font.family'] = "Malgun Gothic"
+    font_name = "Malgun Gothic"
+elif "NanumGothic" in font_list:
+    font_name = "NanumGothic"
 else:
-    # fallback
-    plt.rcParams['font.family'] = "DejaVu Sans"
+    font_name = "DejaVu Sans"
 
+plt.rcParams['font.family'] = font_name
 plt.rcParams['axes.unicode_minus'] = False
+
+# font_prop 생성
+font_prop = fm.FontProperties(fname=None, family=font_name)
+
+# ... 그래프 그릴 때
+
+ax.legend(frameon=False, prop=font_prop)
+
 
 
 
