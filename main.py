@@ -74,6 +74,8 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
     times = [] # 시간 정보를 저장할 리스트
     values = [] # 농도 값을 저장할 리스트
     
+    error_injected = False # 오류 주입 플래그
+    
     for it in items: # 데이터 항목 반복 처리
         t = it.get('dataTime') # 측정 시간 추출
         val = it.get(key) # 농도 값 추출
@@ -81,12 +83,13 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         try: # 값 변환 시도
             v = float(val) # 농도 값을 실수형으로 변환
             
-            # === 오류 유발 코드 삽입 시작: 특정 값에서 문자열을 추가하여 TypeError 유발 ===
-            # 이 코드는 데이터가 50.0일 경우 숫자 대신 문자열을 저장하여
-            # 이후 계산 (예: max() 함수) 시 TypeError를 발생시킵니다.
-            if v == 50.0:
-                 v = "ERROR_VAL" # 숫자 대신 문자열을 목록에 삽입
-            # === 오류 유발 코드 삽입 끝 ===
+            # === 오류 유발 코드 수정 시작: 첫 번째 유효한 데이터에 문자열을 삽입하여 버그 보장 ===
+            # 이 코드는 첫 번째 유효한 데이터에 무조건 문자열을 저장하여
+            # 이후 데이터 테이블(st.dataframe)에서 TypeError를 발생시킵니다.
+            if not error_injected:
+                 v = "ERROR_VAL" # 숫자 대신 문자열을 목록에 강제 삽입
+                 error_injected = True
+            # === 오류 유발 코드 수정 끝 ===
             
         except: # 변환 실패 시
             continue # 다음 항목으로 건너뛰기
@@ -109,27 +112,30 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
 
 def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 예측 함수
     """선형 회귀 모델로 다음 n_hours 시간 뒤의 농도 값들을 예측하고, 해당 시간대 리스트와 함께 반환하는 함수."""
-    if len(values) < 3: # 데이터 부족 시 예측 불가
+    # 예측을 위해서는 숫자 값만 필요하므로, 여기서 미리 숫자 값만 필터링합니다.
+    numeric_values = [v for v in values if isinstance(v, (int, float))]
+
+    if len(numeric_values) < 3: # 데이터 부족 시 예측 불가
         return None, None, None
         
-    try: # 비숫자 값(예: "ERROR_VAL")이 포함되어 ValueError가 발생할 경우를 처리합니다.
-        X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
-        # ERROR_VAL이 values에 있을 경우, 여기서 TypeError 또는 ValueError가 발생할 수 있습니다.
-        y = np.array(values) # Y축(농도 값) 데이터 준비 
+    try: 
+        X = np.arange(len(numeric_values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
+        y = np.array(numeric_values) # Y축(농도 값) 데이터 준비 
     except ValueError:
-        st.warning("경고: 예측 데이터에 비숫자 값(API 오류)이 포함되어 예측을 건너뜁니다.")
+        st.warning("경고: 예측 데이터 준비 중 오류가 발생했습니다. 예측을 건너뜁니다.")
         return None, None, None # 예측 불가능 상태 반환
     
     model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
     # Predict n_hours points (T+1, T+2, ..., T+n)
-    X_pred = np.arange(len(values), len(values) + n_hours).reshape(-1, 1)
+    X_pred = np.arange(len(numeric_values), len(numeric_values) + n_hours).reshape(-1, 1)
     predict_values = model.predict(X_pred)
     
     # 예측값이 음수가 되지 않도록 최소값을 1.0으로 설정 (사용자 요청 반영)
     predict_values = np.maximum(1.0, predict_values)
     
-    # Calculate the future times
+    # Calculate the future times (times는 오류 값이 포함되어 있을 수 있으므로, 예측 시간에는 마지막 시간을 사용)
+    # 다만, times의 길이가 numeric_values의 길이와 다를 수 있으므로, 예측 시간에 사용되는 times[-1]은 마지막 측정 시간을 나타냅니다.
     last_time = times[-1]
     predict_times = [last_time + timedelta(hours=i) for i in range(1, n_hours + 1)]
     
@@ -235,7 +241,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
 
     # 데이터 처리 개수 확인 메시지
     if items:
-        st.info(f"요청한 데이터는 {num_rows_to_fetch}개, 실제 처리된 유효 데이터 포인트는 **{len(values)}**개입니다.")
+        st.info(f"요청한 데이터는 {num_rows_to_fetch}개, 실제 처리된 유효 데이터 포인트는 **{len(values)}**개입니다. (참고: 데이터에 **의도된 오류값(ERROR_VAL) 1개**가 포함되어 있습니다.)")
     
     # 예측 실행
     predict_values, predict_times, model = linear_regression_predict(times, values, n_hours=n_forecast_hours)
@@ -256,7 +262,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
-    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생합니다. -> max() 함수 전에 숫자인 값만 필터링합니다.
+    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생할 수 있습니다. -> max() 함수 전에 숫자인 값만 필터링합니다.
     numeric_values = [v for v in values if isinstance(v, (int, float))] # 숫자 값만 필터링
     max_val = max(numeric_values) if numeric_values else 0 # 필터링된 데이터의 최대값
     # 예측값 중 최대값도 포함하여 Y축 최대 범위를 계산
@@ -274,23 +280,22 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.set_facecolor('#f9f9f9') # 그래프 배경색 설정
     ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1) # 그리드 선 추가
     
-    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
+    # 그래프에 사용될 숫자 값과 해당 시간만 필터링
+    plot_times = [t for t, v in zip(times, values) if isinstance(v, (int, float))]
+    plot_values = numeric_values
+    
+    ax.plot(plot_times, plot_values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
     
     # 24시간 데이터에 대해 값 텍스트 표시
-    for x, y in zip(times, values):
-        try:
-            # 숫자일 때만 레이블 표시 시도 
-            if isinstance(y, (int, float)):
-                 ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') 
-        except:
-            pass
+    for x, y in zip(plot_times, plot_values):
+        ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') 
 
-    if predict_values is not None: # 예측값이 있을 경우
+    if predict_values is not None and plot_times: # 예측값이 있고 실측 그래프 데이터가 있을 경우
         # Combine the last real point with the predicted points for plotting
-        plot_times = [times[-1]] + predict_times
-        plot_values = [values[-1]] + list(predict_values)
+        plot_times_with_pred = [plot_times[-1]] + predict_times
+        plot_values_with_pred = [plot_values[-1]] + list(predict_values)
         
-        ax.plot(plot_times, plot_values, 
+        ax.plot(plot_times_with_pred, plot_values_with_pred, 
                 color='#f28500', marker='o', linestyle='--', linewidth=2, 
                 label=f'향후 {n_forecast_hours}시간 예측') 
 
@@ -341,8 +346,8 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            # !!! 데이터 테이블 표시 버그 유발 지점 !!!
-            # ERROR_VAL이 포함되어 있을 때, f"{v:.1f}"에서 문자열을 실수로 포맷하려고 하여 TypeError가 발생합니다.
+            # !!! 데이터 테이블 표시 버그 유발 지점 (TypeError) !!!
+            # 'values'에 포함된 "ERROR_VAL" 문자열을 f-string으로 실수(.1f) 포맷하려 하면 TypeError가 발생합니다.
             f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
@@ -351,7 +356,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     st.subheader("📌 예측 결과 (향후 3시간)") # 예측 결과 부제목
     
     if predict_values is not None and values: # 예측값과 실측값이 모두 있을 경우
-        # 안전한 계산을 위해 숫자 값만 필터링합니다. (테이블 에러와 별개)
+        # 안전한 계산을 위해 숫자 값만 필터링합니다. 
         last_numeric_value = [v for v in values if isinstance(v, (int, float))][-1]
         last_time = times[-1]
         
