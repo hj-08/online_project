@@ -200,8 +200,6 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         num_rows_to_fetch = 168
     elif data_range == '지난 30일 (720시간)':
         num_rows_to_fetch = 720 
-    
-    다.")
 
     fig, ax = plt.subplots(figsize=(14, 7)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
