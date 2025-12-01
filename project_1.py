@@ -323,16 +323,21 @@ if st.button("분석 시작", key="analyze_button"):
     ax.set_xticks(tick_times)
     ax.set_xticklabels(tick_labels, rotation=45)
 
-    # Y축 레이블 설정 (PM 타입에 따라 변경)
-    ax.set_ylabel(f"{pm_type} (㎍/m³)")
+    # 그래프 제목 추가
+    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이', fontsize=16, pad=20)
     
-    # 범례 설정
+    # Y축 레이블 설정 (PM 타입에 따라 변경)
+    ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)")
+    ax.set_xlabel("측정 시간") # X축 레이블 추가
+    
+    # 범례 설정 (그래프 오른쪽 상단 바깥에 위치하도록 조정)
     if font_prop:
-        ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.02, 1), borderaxespad=0.)
+        ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.01, 1), borderaxespad=0.)
     else:
-        ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.02, 1), borderaxespad=0.) 
+        ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.01, 1), borderaxespad=0.) 
         
-    plt.tight_layout()
+    # **[수정]** 범례가 잘리지 않도록 그래프의 오른쪽 여백을 수동으로 확보
+    plt.subplots_adjust(right=0.8) # 오른쪽 여백을 20% 정도 확보
 
     st.pyplot(fig)
     
