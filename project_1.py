@@ -232,8 +232,8 @@ if st.button("분석 시작", key="analyze_button"):
     predict = linear_regression_predict(values)
 
     # --- Matplotlib 시각화 ---
-    # 그래프 크기를 (12, 6)으로 유지
-    fig, ax = plt.subplots(figsize=(12, 6))
+    # 그래프 크기를 (14, 7)로 확장
+    fig, ax = plt.subplots(figsize=(14, 7))
     criteria = get_grade_criteria(pm_type)
     
     # 1. 미세먼지 기준선 (배경 색상 및 라벨) 추가
