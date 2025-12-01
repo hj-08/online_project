@@ -113,6 +113,9 @@ def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 
     X_pred = np.arange(len(values), len(values) + n_hours).reshape(-1, 1)
     predict_values = model.predict(X_pred)
     
+    # 예측값이 음수가 되지 않도록 최소값을 1.0으로 설정 (사용자 요청 반영)
+    predict_values = np.maximum(1.0, predict_values)
+    
     # Calculate the future times
     last_time = times[-1]
     predict_times = [last_time + timedelta(hours=i) for i in range(1, n_hours + 1)]
@@ -241,8 +244,14 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
     max_val = max(values) if values else 0 # 데이터 최대값
+    # 예측값 중 최대값도 포함하여 Y축 최대 범위를 계산
+    if predict_values is not None and len(predict_values) > 0:
+        max_pred_val = max(predict_values)
+        max_val = max(max_val, max_pred_val)
+
     y_max_limit = max(max_val * 1.2, criteria['매우 나쁨'][0] * 1.2) # Y축 최대 범위 설정 (넉넉하게)
     
+    # Y축 최소값도 0 대신 1로 시작하는 것을 고려할 수 있지만, 그래프의 시각적 연속성을 위해 0부터 시작하도록 유지
     ax.set_ylim(0, y_max_limit) # Y축 범위 적용
     
     ax.axhspan(criteria['매우 나쁨'][0], y_max_limit, facecolor='red', alpha=0.1, label='매우 나쁨') # 매우 나쁨 영역 표시
