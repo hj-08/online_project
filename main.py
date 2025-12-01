@@ -83,13 +83,12 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         try: # 값 변환 시도
             v = float(val) # 농도 값을 실수형으로 변환
             
-            # === 오류 유발 코드 수정 시작: 첫 번째 유효한 데이터에 문자열을 삽입하여 버그 보장 ===
-            # 이 코드는 첫 번째 유효한 데이터에 무조건 문자열을 저장하여
-            # 이후 데이터 테이블(st.dataframe)에서 TypeError를 발생시킵니다.
+            # === 오류 유발 코드 (버그 보장) ===
+            # 첫 번째 유효한 데이터에 문자열을 저장하여 이후 데이터 테이블(st.dataframe)에서 TypeError를 발생시킵니다.
             if not error_injected:
                  v = "ERROR_VAL" # 숫자 대신 문자열을 목록에 강제 삽입
                  error_injected = True
-            # === 오류 유발 코드 수정 끝 ===
+            # === 오류 유발 코드 끝 ===
             
         except: # 변환 실패 시
             continue # 다음 항목으로 건너뛰기
@@ -229,7 +228,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     try: # 데이터 요청 및 오류 처리
         with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'): # 로딩 스피너 표시
             items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
-        st.success("데이터 불러오기 성공!") # 성공 메시지
+        # st.success("데이터 불러오기 성공!") # <<-- 이 줄이 제거되었습니다.
     except requests.HTTPError: # HTTP 오류 처리
         st.error("데이터 요청 중 HTTP 오류가 발생했습니다. API 서버 상태를 확인하세요.")
         st.stop()
