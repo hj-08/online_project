@@ -64,10 +64,7 @@ def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     r.raise_for_status() # HTTP 오류 발생 시 예외 처리
     
     data = r.json() # JSON 응답을 딕셔너리로 변환
-    
-    # <<< KeyError 수정: 'response' 키로 정상 복구 >>>
-    items = data['response']['body']['items'] 
-    
+    items = data['response']['body']['items'] # 실제 측정 데이터 목록 추출
     return items # 데이터 목록 반환
 
 def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
@@ -98,15 +95,6 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         times.append(dt) # 유효한 시간 추가
         values.append(v) # 유효한 값 추가
         
-    # <<< 이전 오류 수정: TypeError 주입 제거 및 ZeroDivisionError 주입 준비 >>>
-    # 데이터는 모두 실수형이어야 하므로, 이전의 문자열 변환 코드를 제거하여 TypeError를 수정합니다.
-    
-    # <<< 새로운 오류 주입: ZeroDivisionError를 유발하기 위해 첫 번째 값을 0으로 만듭니다. >>>
-    if values and len(values) > 5 and len(values) % 10 == 0:
-        # 데이터 개수가 10의 배수일 때, 첫 번째 값을 0.0으로 강제 설정
-        values[0] = 0.0 
-        st.info("🚨 디버그: 예측 실패를 위해 데이터의 첫 번째 값이 **0.0**으로 강제 설정되었습니다! (ZeroDivisionError 주입 지점)")
-
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
 def linear_regression_predict(values): # 선형 회귀 예측 함수
@@ -114,16 +102,6 @@ def linear_regression_predict(values): # 선형 회귀 예측 함수
     if len(values) < 3: # 데이터 부족 시 예측 불가
         return None
         
-    # <<< 새로운 오류 주입: ZeroDivisionError >>>
-    # 이 코드는 데이터 분석 시 '0으로 나누기' 오류를 시뮬레이션합니다.
-    if values[0] == 0:
-        # 데이터의 첫 번째 값이 0일 경우, 이 값을 분모로 사용하여 의도적으로 ZeroDivisionError를 유발합니다.
-        # 이 시점에서 오류가 발생하고 앱이 중단될 것입니다.
-        risk_factor = 100 / values[0] 
-        st.error("🚨 디버그: ZeroDivisionError가 예측 계산 중 유발되었습니다.")
-    # <<< ZeroDivisionError 주입 끝 >>>
-
-    # values 리스트의 모든 요소가 float이므로 np.array 변환은 이제 성공합니다.
     X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
     y = np.array(values) # Y축(농도 값) 데이터 준비
     
@@ -194,7 +172,7 @@ AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
 
 default_city = "서울"
 city = st.selectbox("시/도 선택", list(AIR_STATION_MAP.keys()), # 시/도 선택 드롭다운
-                     index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
+                    index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
 
 district_options = AIR_STATION_MAP.get(city, []) # 선택된 시/도의 구/군 목록 가져오기
 
@@ -228,26 +206,23 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
             items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
         st.success("데이터 불러오기 성공!") # 성공 메시지
     except requests.HTTPError: # HTTP 오류 처리
-        st.error("데이터 요청 중 HTTP 오류가 발생했습니다. API 서버 상태를 확인하세요.")
-        st.stop()
+        st.error("데이터 요청 중 HTTP 오류가 발생했습니다.")
+        st.stop() # 프로그램 중지
     except Exception as e: # 기타 오류 처리
         st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
         st.stop() 
 
     times, values = parse_pm(items, key=data_key) # 데이터 파싱
 
-    if not values or len(values) < 3: # 유효한 데이터가 부족할 경우
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
-        # 데이터가 없어도 그래프는 그리지만, 예측은 시도하지 않습니다.
+    if not values: # 유효한 데이터가 없을 경우
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다.")
+        st.stop() # 프로그램 중지
+        
+    if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
+        predict = linear_regression_predict(values) # 예측값 계산
+    else: # 장기 조회 시 예측 비활성화
         predict = None
-    else:
-        if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
-            # 이 라인에서 ZeroDivisionError가 발생할 수 있습니다. (linear_regression_predict 내부)
-            predict = linear_regression_predict(values) # 예측값 계산
-        else: # 장기 조회 시 예측 비활성화
-            predict = None
-            st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
-
+        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
 
     fig, ax = plt.subplots(figsize=(12,7)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
@@ -270,15 +245,8 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
     
     if num_rows_to_fetch <= 48: # 단기 조회 시 값 텍스트 표시
-        # values에 문자열이 포함되어 있어도, 여기서는 plt.plot이 처리 가능하면 실행됩니다.
-        # 그러나 대부분의 경우 matplotlib이 실패하거나 잘못된 출력을 냅니다.
         for x, y in zip(times, values):
-            try:
-                # 숫자일 때만 레이블 표시 시도 (오류 발생 시 건너뛰기)
-                if isinstance(y, (int, float)):
-                     ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') 
-            except:
-                pass
+            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') # 각 점 위에 농도 값 표시
 
     if predict is not None: # 예측값이 있을 경우
         next_time = times[-1] + timedelta(hours=1) # 예측 시간 (마지막 시간 + 1시간)
@@ -325,7 +293,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values] # 이제 모두 실수형입니다.
+            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
