@@ -32,12 +32,11 @@ def set_korean_font(): # 한글 폰트 설정 메인 함수
     if font_name: # 폰트 검색 성공 시 설정
         plt.rcParams['font.family'] = font_name # Matplotlib 폰트 설정
         plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지
-        st.sidebar.success(f"한글 폰트 설정 완료: {font_name}") # 성공 메시지 출력
         
         font_prop = fm.FontProperties(family=font_name) # 폰트 속성 객체 생성
     else: # 폰트 검색 실패 시
         font_name = "DejaVu Sans" # 기본 영문 폰트 사용
-        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없어. 기본 폰트({font_name}) 사용.") # 경고 메시지 출력
+        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없습니다. 기본 폰트({font_name}) 사용.") # 경고 메시지 출력
         font_prop = None # 폰트 속성 없음
 
     plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지 재확인
@@ -132,7 +131,7 @@ def get_grade_criteria(pm_type): # 등급 기준 반환 함수
 def recommend_by_value(val, pm_type='PM10'): # 행동 추천 메시지 함수
     """농도 값에 따라 행동 추천 메시지를 돌려주는 함수."""
     if val is None:
-        return "예측값을 계산할 수 없어." # 예측 불가 시 메시지
+        return "예측값을 계산할 수 없습니다." # 예측 불가 시 메시지
     
     criteria = get_grade_criteria(pm_type) # 해당 PM 타입의 기준 가져오기
         
@@ -149,7 +148,7 @@ def recommend_by_value(val, pm_type='PM10'): # 행동 추천 메시지 함수
 # --- Streamlit 웹 화면(UI) 구성 시작 ---
 
 st.title("🌫️ 실시간 미세먼지 분석 + 예측") # 웹 앱 제목
-st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 해.") # 설명 텍스트
+st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다.") # 설명 텍스트
 
 AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
     "서울": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
@@ -181,7 +180,7 @@ if district_options: # 구/군 목록이 있을 경우
     gu = st.selectbox("구/군 (측정소) 선택", district_options, index=0) # 구/군 선택 드롭다운
 else: # 구/군 목록이 없을 경우
     gu = st.text_input("구/군 (측정소) 입력 (목록 없음)", "") # 수동 입력창
-    st.warning("선택된 시/도에 대한 측정소 목록이 없어. 직접 입력해.") # 경고 메시지
+    st.warning("선택된 시/도에 대한 측정소소 목록이 없습니다. ") # 경고 메시지
 
 pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0) # 측정 항목 라디오 버튼
 
@@ -202,28 +201,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     elif data_range == '지난 30일 (720시간)':
         num_rows_to_fetch = 720 
     
-    try: # 데이터 요청 및 오류 처리
-        with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'): # 로딩 스피너 표시
-            items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
-        st.success("데이터 불러오기 성공!") # 성공 메시지
-    except requests.HTTPError: # HTTP 오류 처리
-        st.error("데이터 요청 중 HTTP 오류가 발생했어. 지역명 또는 API 키를 확인해.")
-        st.stop() # 프로그램 중지
-    except Exception as e: # 기타 오류 처리
-        st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
-        st.stop() 
-
-    times, values = parse_pm(items, key=data_key) # 데이터 파싱
-
-    if not values: # 유효한 데이터가 없을 경우
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없어. 지역명을 다시 확인해.")
-        st.stop() # 프로그램 중지
-        
-    if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
-        predict = linear_regression_predict(values) # 예측값 계산
-    else: # 장기 조회 시 예측 비활성화
-        predict = None
-        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화돼.")
+    다.")
 
     fig, ax = plt.subplots(figsize=(14, 7)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
