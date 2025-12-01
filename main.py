@@ -299,6 +299,17 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
 
     ax.set_xticks(tick_times) # X축 눈금 위치 설정
     ax.set_xticklabels(tick_labels, rotation=45) # X축 레이블 표시 및 45도 회전
+    
+    # === X축 범위 강제 설정 추가 (핵심 수정) ===
+    if times:
+        end_time = times[-1] # 마지막 측정 시간
+        # 요청한 데이터 수 만큼의 시간 범위를 시작점으로 계산
+        start_time = end_time - timedelta(hours=num_rows_to_fetch - 1) 
+        
+        # X축 범위를 명시적으로 설정하여 그래프가 요청된 전체 기간을 표시하도록 강제합니다.
+        # 이렇게 하면 데이터 포인트가 적더라도 축이 압축되지 않습니다.
+        ax.set_xlim(start_time, end_time) 
+    # ========================================
 
     ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이', fontsize=16, pad=20) # 그래프 제목
     ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)") # Y축 레이블
