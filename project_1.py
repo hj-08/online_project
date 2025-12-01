@@ -32,6 +32,7 @@ def set_korean_font(): # 한글 폰트 설정 메인 함수
     if font_name: # 폰트 검색 성공 시 설정
         plt.rcParams['font.family'] = font_name # Matplotlib 폰트 설정
         plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지
+        st.sidebar.success(f"한글 폰트 설정 완료: {font_name}") # 성공 메시지 출력
         
         font_prop = fm.FontProperties(family=font_name) # 폰트 속성 객체 생성
     else: # 폰트 검색 실패 시
@@ -303,4 +304,4 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 예측 농도 값 출력
         st.info(recommend_by_value(predict, pm_type=pm_type)) # 행동 추천 메시지 출력
     else: # 예측값이 없을 경우
-        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없어.") # 경고 메시지
+        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없습니다.") # 경고 메시지
