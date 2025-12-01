@@ -65,10 +65,8 @@ def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     
     data = r.json() # JSON 응답을 딕셔너리로 변환
     
-    # <<< 더 큰 오류 주입: KeyError >>>
-    # API 응답 구조가 변경되었다고 가정하고, 원래 키인 'response' 대신 
-    # 존재하지 않는 키인 'api_response'를 사용해서 KeyError를 발생시킵니다.
-    items = data['api_response']['body']['items'] 
+    # <<< KeyError 수정: 'response' 키로 정상 복구 >>>
+    items = data['response']['body']['items'] 
     
     return items # 데이터 목록 반환
 
@@ -100,6 +98,14 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         times.append(dt) # 유효한 시간 추가
         values.append(v) # 유효한 값 추가
         
+    # <<< 새로운 오류 주입: TypeError >>>
+    # 데이터는 모두 실수형이어야 하는데, 의도적으로 마지막 유효한 데이터를 
+    # 문자열로 변환하여 저장합니다. 이는 이후 예측 모델 학습 시 TypeError를 유발합니다.
+    if values:
+        # 마지막 유효한 값을 문자열로 강제 변환
+        values[-1] = str(values[-1])
+        st.info("🚨 디버그: 마지막 데이터 포인트가 실수 대신 **문자열**로 변환되었습니다! (TypeError 주입 지점)")
+
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
 def linear_regression_predict(values): # 선형 회귀 예측 함수
@@ -107,6 +113,7 @@ def linear_regression_predict(values): # 선형 회귀 예측 함수
     if len(values) < 3: # 데이터 부족 시 예측 불가
         return None
         
+    # values 리스트에 문자열이 있으면 np.array 변환 시 오류 발생 (TypeError)
     X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
     y = np.array(values) # Y축(농도 값) 데이터 준비
     
@@ -208,15 +215,10 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     
     try: # 데이터 요청 및 오류 처리
         with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'): # 로딩 스피너 표시
-            # fetch_air_data 내부에서 KeyError가 발생합니다.
             items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
         st.success("데이터 불러오기 성공!") # 성공 메시지
     except requests.HTTPError: # HTTP 오류 처리
         st.error("데이터 요청 중 HTTP 오류가 발생했습니다. API 서버 상태를 확인하세요.")
-        st.stop()
-    except KeyError as e: # KeyError를 명시적으로 잡아서 더 명확한 메시지를 띄웁니다.
-        st.error(f"❌ 데이터 파싱 오류: API 응답 구조에서 필수 키 {e}를 찾을 수 없습니다.")
-        st.error("이것은 API 응답 형식이 예기치 않게 변경되었거나, 데이터 구조에 접근하는 코드에 문제가 있다는 의미입니다.")
         st.stop()
     except Exception as e: # 기타 오류 처리
         st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
@@ -224,15 +226,18 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
 
     times, values = parse_pm(items, key=data_key) # 데이터 파싱
 
-    if not values: # 유효한 데이터가 없을 경우
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다.")
-        st.stop() # 프로그램 중지
-        
-    if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
-        predict = linear_regression_predict(values) # 예측값 계산
-    else: # 장기 조회 시 예측 비활성화
+    if not values or len(values) < 3: # 유효한 데이터가 부족할 경우
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
+        # 데이터가 없어도 그래프는 그리지만, 예측은 시도하지 않습니다.
         predict = None
-        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
+    else:
+        if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
+            # 이 라인에서 TypeError가 발생합니다. (linear_regression_predict 내부)
+            predict = linear_regression_predict(values) # 예측값 계산
+        else: # 장기 조회 시 예측 비활성화
+            predict = None
+            st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
+
 
     fig, ax = plt.subplots(figsize=(12,7)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
@@ -255,8 +260,15 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
     
     if num_rows_to_fetch <= 48: # 단기 조회 시 값 텍스트 표시
+        # values에 문자열이 포함되어 있어도, 여기서는 plt.plot이 처리 가능하면 실행됩니다.
+        # 그러나 대부분의 경우 matplotlib이 실패하거나 잘못된 출력을 냅니다.
         for x, y in zip(times, values):
-            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') # 각 점 위에 농도 값 표시
+            try:
+                # 숫자일 때만 레이블 표시 시도 (오류 발생 시 건너뛰기)
+                if isinstance(y, (int, float)):
+                     ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') 
+            except:
+                pass
 
     if predict is not None: # 예측값이 있을 경우
         next_time = times[-1] + timedelta(hours=1) # 예측 시간 (마지막 시간 + 1시간)
@@ -303,7 +315,8 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
+            # 테이블에는 오류가 주입된 마지막 값이 문자열로 출력될 수 있습니다.
+            f"{pm_type} 농도 (㎍/m³)": [f"{v}" for v in values] 
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
