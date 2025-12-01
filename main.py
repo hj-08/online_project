@@ -80,6 +80,14 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         
         try: # 값 변환 시도
             v = float(val) # 농도 값을 실수형으로 변환
+            
+            # === 오류 유발 코드 삽입 시작: 특정 값에서 문자열을 추가하여 TypeError 유발 ===
+            # 이 코드는 데이터가 50.0일 경우 숫자 대신 문자열을 저장하여
+            # 이후 계산 (예: max() 함수) 시 TypeError를 발생시킵니다.
+            if v == 50.0:
+                 v = "ERROR_VAL" # 숫자 대신 문자열을 목록에 삽입
+            # === 오류 유발 코드 삽입 끝 ===
+            
         except: # 변환 실패 시
             continue # 다음 항목으로 건너뛰기
         
@@ -105,7 +113,8 @@ def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 
         return None, None, None
         
     X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
-    y = np.array(values) # Y축(농도 값) 데이터 준비
+    # ERROR_VAL이 values에 있을 경우, 여기서 TypeError 또는 ValueError가 발생할 수 있습니다.
+    y = np.array(values) # Y축(농도 값) 데이터 준비 
     
     model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
@@ -243,6 +252,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
+    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생합니다.
     max_val = max(values) if values else 0 # 데이터 최대값
     # 예측값 중 최대값도 포함하여 Y축 최대 범위를 계산
     if predict_values is not None and len(predict_values) > 0:
@@ -326,6 +336,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
+            # ERROR_VAL이 포함되어 있으면 여기서 에러가 발생하여 이 부분이 실행되지 않을 수 있습니다.
             f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
