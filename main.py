@@ -46,8 +46,23 @@ font_prop = set_korean_font() # 폰트 설정 함수 실행
 
 
 # --- 미세먼지 공공 데이터 API 키 ---
-# 실제 동작을 위해서는 유효한 API 키가 필요하지만, 오류 주입을 위해 임시로 플레이스홀더를 사용합니다.
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
+
+# <<< FileNotFoundError를 강제로 발생시키기 위한 함수 >>>
+def check_required_config_file():
+    """
+    데이터 로딩 전, 앱 구동에 필수적인 가상 설정 파일을 확인합니다.
+    (의도적으로 존재하지 않는 파일을 열어 FileNotFoundError를 발생시킵니다.)
+    """
+    # 실제 환경에는 존재하지 않는 가상의 설정 파일 경로입니다.
+    # CSV 파일을 찾는 오류 메시지를 재현하기 위해 경로를 설정했습니다.
+    file_path = '/data/station_configuration.csv' 
+    st.error(f"🚨 중요 설정 파일 확인 중: {file_path}")
+    
+    # 파일을 읽기 모드('r')로 열려고 시도합니다. 파일이 없으므로 FileNotFoundError가 발생합니다.
+    with open(file_path, 'r') as f:
+        # 이 코드는 파일이 없으므로 실행되지 않습니다.
+        return f.read()
 
 def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     """주어진 '측정소 이름'의 미세먼지 데이터를 API로 요청하고 받아오는 함수."""
@@ -66,9 +81,8 @@ def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     
     data = r.json() # JSON 응답을 딕셔너리로 변환
     
-    # >>> 오류 주입 지점: 'body' 대신 'payload'라는 존재하지 않는 키를 사용
-    # 이로 인해 KeyError가 발생합니다.
-    items = data['response']['payload']['items'] 
+    # 올바른 키인 'body'를 사용하여 데이터를 추출합니다.
+    items = data['response']['body']['items'] 
     
     return items # 데이터 목록 반환
 
@@ -100,6 +114,7 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         times.append(dt) # 유효한 시간 추가
         values.append(v) # 유효한 값 추가
         
+    # FileNotFoundError 때문에 이 코드는 실행되지 않지만, 논리 오류는 제거하고 올바르게 수정해 둡니다.
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
 def linear_regression_predict(values): # 선형 회귀 예측 함수
@@ -196,6 +211,19 @@ data_range = st.selectbox("데이터 조회 기간", # 데이터 조회 기간 �
 station = gu # 측정소 이름 설정
 
 if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 클릭 시
+    
+    # <<< 오류 발생 지점: FileNotFoundError를 강제 발생시켜 앱 실행을 멈춥니다. >>>
+    try:
+        check_required_config_file()
+    except Exception as e:
+        # 오류가 발생하면, Streamlit이 이를 포착하고 빨간색 오류 메시지를 사용자에게 보여줍니다.
+        # 기존의 FileNotFoundError 메시지와 유사하게 보입니다.
+        st.error(f"❌ 설정 파일 로드 실패: {e}")
+        # 오류가 발생한 후에는 더 이상 아래 코드를 실행하지 않고 중단합니다.
+        st.stop()
+        
+    # --- 아래 코드는 오류가 발생하면 실행되지 않습니다. ---
+
     st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과") # 분석 결과 부제목 출력
     
     data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value' # API 요청을 위한 데이터 키 설정
@@ -212,9 +240,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.success("데이터 불러오기 성공!") # 성공 메시지
     except requests.HTTPError: # HTTP 오류 처리
         st.error("데이터 요청 중 HTTP 오류가 발생했습니다.")
-        st.stop() # 프로그램 중지
     except Exception as e: # 기타 오류 처리
-        # KeyError가 발생하면 이 곳에서 잡히게 됩니다.
         st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
         st.stop() 
 
