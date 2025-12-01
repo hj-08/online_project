@@ -98,13 +98,14 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         times.append(dt) # 유효한 시간 추가
         values.append(v) # 유효한 값 추가
         
-    # <<< 새로운 오류 주입: TypeError >>>
-    # 데이터는 모두 실수형이어야 하는데, 의도적으로 마지막 유효한 데이터를 
-    # 문자열로 변환하여 저장합니다. 이는 이후 예측 모델 학습 시 TypeError를 유발합니다.
-    if values:
-        # 마지막 유효한 값을 문자열로 강제 변환
-        values[-1] = str(values[-1])
-        st.info("🚨 디버그: 마지막 데이터 포인트가 실수 대신 **문자열**로 변환되었습니다! (TypeError 주입 지점)")
+    # <<< 이전 오류 수정: TypeError 주입 제거 및 ZeroDivisionError 주입 준비 >>>
+    # 데이터는 모두 실수형이어야 하므로, 이전의 문자열 변환 코드를 제거하여 TypeError를 수정합니다.
+    
+    # <<< 새로운 오류 주입: ZeroDivisionError를 유발하기 위해 첫 번째 값을 0으로 만듭니다. >>>
+    if values and len(values) > 5 and len(values) % 10 == 0:
+        # 데이터 개수가 10의 배수일 때, 첫 번째 값을 0.0으로 강제 설정
+        values[0] = 0.0 
+        st.info("🚨 디버그: 예측 실패를 위해 데이터의 첫 번째 값이 **0.0**으로 강제 설정되었습니다! (ZeroDivisionError 주입 지점)")
 
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
@@ -113,7 +114,16 @@ def linear_regression_predict(values): # 선형 회귀 예측 함수
     if len(values) < 3: # 데이터 부족 시 예측 불가
         return None
         
-    # values 리스트에 문자열이 있으면 np.array 변환 시 오류 발생 (TypeError)
+    # <<< 새로운 오류 주입: ZeroDivisionError >>>
+    # 이 코드는 데이터 분석 시 '0으로 나누기' 오류를 시뮬레이션합니다.
+    if values[0] == 0:
+        # 데이터의 첫 번째 값이 0일 경우, 이 값을 분모로 사용하여 의도적으로 ZeroDivisionError를 유발합니다.
+        # 이 시점에서 오류가 발생하고 앱이 중단될 것입니다.
+        risk_factor = 100 / values[0] 
+        st.error("🚨 디버그: ZeroDivisionError가 예측 계산 중 유발되었습니다.")
+    # <<< ZeroDivisionError 주입 끝 >>>
+
+    # values 리스트의 모든 요소가 float이므로 np.array 변환은 이제 성공합니다.
     X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
     y = np.array(values) # Y축(농도 값) 데이터 준비
     
@@ -232,7 +242,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         predict = None
     else:
         if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
-            # 이 라인에서 TypeError가 발생합니다. (linear_regression_predict 내부)
+            # 이 라인에서 ZeroDivisionError가 발생할 수 있습니다. (linear_regression_predict 내부)
             predict = linear_regression_predict(values) # 예측값 계산
         else: # 장기 조회 시 예측 비활성화
             predict = None
@@ -315,8 +325,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            # 테이블에는 오류가 주입된 마지막 값이 문자열로 출력될 수 있습니다.
-            f"{pm_type} 농도 (㎍/m³)": [f"{v}" for v in values] 
+            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values] # 이제 모두 실수형입니다.
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
