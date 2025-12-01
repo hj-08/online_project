@@ -98,22 +98,29 @@ if st.button("분석 시작"):
     # ------------------ 그래프 생성 -------------------------
     fig, ax = plt.subplots(figsize=(10, 4))
 
-    # 실측치
-    ax.plot(times, values, color='blue', marker='o', label='실측 PM10')
+    # 배경색과 그리드 설정
+    ax.set_facecolor('#f9f9f9')  # 연한 회색 배경
+    ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1)
 
-    # 예측선
+    # 실측 데이터 라인 + 점 + 값 텍스트
+    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label='실측 PM10')
+    for x, y in zip(times, values):
+        ax.text(x, y + 1, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
+
+    # 예측선 (주황) + 점 + 값 텍스트
     if predict is not None:
         next_time = times[-1] + timedelta(hours=1)
         ax.plot([times[-1], next_time],
                 [values[-1], predict],
-                color='orange', linestyle='-', marker='o', label=f'예측값: {predict:.1f}')
+                color='#f28500', marker='o', linewidth=2, label=f'예측값: {predict:.1f}')
+        ax.text(next_time, predict + 1, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center')
 
-    # x축 라벨: 6시간 단위
+    # x축 레이블 6시간 간격, 회전 표시
     ax.set_xticks(times[::6])
     ax.set_xticklabels([t.strftime("%m-%d %H:%M") for t in times[::6]], rotation=45)
 
     ax.set_ylabel("PM10 (㎍/m³)")
-    ax.legend()
+    ax.legend(frameon=False)
     plt.tight_layout()
 
     st.pyplot(fig)
