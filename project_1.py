@@ -8,38 +8,41 @@ from sklearn.linear_model import LinearRegression
 import matplotlib.font_manager as fm
 import os
 
-# --- 한글 폰트 설정 수정: 시스템 환경에 구애받지 않도록 파일 경로 지정 ---
-# 1. NanumGothicBold.ttf 파일을 프로젝트 폴더에 넣어주세요.
-FONT_FILE_PATH = "NanumGothicBold.ttf"
-
-# 폰트 파일이 존재하는지 확인하고 설정
-try:
-    if os.path.exists(FONT_FILE_PATH):
-        # 폰트 속성 생성 (파일 경로 지정)
-        font_prop = fm.FontProperties(fname=FONT_FILE_PATH)
-        font_name = font_prop.get_name()
-
-        # Matplotlib에 폰트 등록 및 설정
-        fm.fontManager.addfont(FONT_FILE_PATH)
-        plt.rcParams['font.family'] = font_name
-        st.sidebar.success(f"한글 폰트 설정 완료: {font_name}")
-
-    else:
-        # 파일이 없을 경우 기본 폰트로 설정하고 경고
+# --- 한글 폰트 설정 수정: 시스템에 설치된 나눔고딕/말랑고딕 사용을 시도 ---
+def set_korean_font():
+    """시스템에 설치된 한글 폰트를 찾아 Matplotlib에 설정합니다."""
+    font_list = [f.name for f in fm.fontManager.ttflist]
+    font_name = None
+    
+    # 1. NanumGothic 계열 폰트 찾기 (Streamlit Cloud에서 자주 사용 가능)
+    for name in ["NanumGothic Bold", "NanumGothic", "NanumBarunGothic"]:
+        if name in font_list:
+            font_name = name
+            break
+            
+    # 2. Malgun Gothic 찾기 (Windows 환경)
+    if not font_name and "Malgun Gothic" in font_list:
+        font_name = "Malgun Gothic"
+        
+    # 3. 기본 폰트 설정
+    if not font_name:
         font_name = "DejaVu Sans"
+        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없습니다. 기본 폰트({font_name}) 사용.")
+        font_prop = None
+    else:
+        # 찾은 폰트로 Matplotlib 설정
         plt.rcParams['font.family'] = font_name
-        st.sidebar.warning(f"폰트 파일 '{FONT_FILE_PATH}'을 찾을 수 없습니다. 기본 폰트({font_name}) 사용.")
-        # 기본 폰트일 경우 font_prop은 None 또는 기본 속성으로 설정
-        font_prop = None 
+        plt.rcParams['axes.unicode_minus'] = False
+        st.sidebar.success(f"한글 폰트 설정 완료: {font_name}")
+        # font_prop 생성
+        font_prop = fm.FontProperties(family=font_name)
 
-    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
-
-except Exception as e:
-    st.sidebar.error(f"폰트 설정 중 오류 발생: {e}")
-    font_name = "DejaVu Sans"
-    plt.rcParams['font.family'] = font_name
     plt.rcParams['axes.unicode_minus'] = False
-    font_prop = None
+    return font_prop
+
+# 폰트 설정 실행 및 font_prop 변수에 저장
+font_prop = set_korean_font()
+
 
 # --- API KEY (공개 API 키이므로 그대로 사용) ---
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e"
@@ -176,7 +179,7 @@ if st.button("분석 시작", key="analyze_button"):
     # Y축 레이블 설정
     ax.set_ylabel("PM10 (㎍/m³)")
     
-    # 범례에 폰트 속성 적용 (폰트 파일이 없을 경우 대비)
+    # 범례에 폰트 속성 적용 (font_prop이 None이 아닐 경우)
     if font_prop:
         ax.legend(frameon=False, prop=font_prop)
     else:
