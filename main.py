@@ -227,7 +227,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     # 예측 실행
     predict_values, predict_times, model = linear_regression_predict(times, values, n_hours=n_forecast_hours)
 
-    if predict_values is None:
+    if predict_values is None or not values:
         predict = None
         st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
     else:
@@ -332,11 +332,38 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
 
 
     st.subheader("📌 예측 결과 (향후 3시간)") # 예측 결과 부제목
-    if predict is not None: # 예측값이 있을 경우
-        st.markdown(f"**최종 예측 시간 ({predict_times[-1].strftime('%Y-%m-%d %H:%M')})**의 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 최종 예측 농도 값 출력
-        
+    
+    if predict_values is not None and values: # 예측값과 실측값이 모두 있을 경우
+        last_value = values[-1] # 직전 측정값
+        st.markdown(f"**직전 측정값 ({times[-1].strftime('%H:%M')})**: **{last_value:.1f} ㎍/m³**")
         st.markdown("---")
-        st.markdown(f"**3시간 뒤 ({predict_times[-1].strftime('%H:%M')}) 예측 기준**")
-        st.info(recommend_by_value(predict, pm_type=pm_type)) # 행동 추천 메시지 출력
-    else: # 예측값이 없을 경우
+        
+        for i in range(n_forecast_hours):
+            current_time = predict_times[i]
+            predicted_value = predict_values[i]
+            change = predicted_value - last_value
+            
+            # 변화량에 따른 아이콘과 색상 설정
+            if change > 0.5: # 0.5 초과 시 증가
+                change_text = f"▲ {abs(change):.1f} ㎍/m³ 증가"
+                color = "red"
+            elif change < -0.5: # -0.5 미만 시 감소
+                change_text = f"▼ {abs(change):.1f} ㎍/m³ 감소"
+                color = "blue"
+            else: # 그 외 (거의 변화 없음)
+                change_text = "↔ 변화 거의 없음"
+                color = "gray"
+            
+            st.markdown(
+                f"**{i+1}시간 뒤 ({current_time.strftime('%H:%M')})** : "
+                f"예측값 **{predicted_value:.1f} ㎍/m³** "
+                f"(<span style='color:{color}'>**{change_text}**</span>)",
+                unsafe_allow_html=True
+            )
+
+        st.markdown("---")
+        # 최종 (3시간 뒤) 예측값을 기준으로 한 행동 추천
+        st.markdown(f"**최종 예측 ({predict_times[-1].strftime('%H:%M')}) 기준**")
+        st.info(recommend_by_value(predict_values[-1], pm_type=pm_type))
+    else:
         st.warning("데이터 부족으로 인해 예측값을 계산할 수 없습니다.") # 경고 메시지
