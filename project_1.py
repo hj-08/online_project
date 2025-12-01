@@ -11,7 +11,7 @@ from sklearn.linear_model import LinearRegression
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e"
 
 def fetch_air_data(station_name, num_rows=48):
-    URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc"
+    URL = "URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty"
     params = {
         'serviceKey': API_KEY,
         'returnType': 'json',
