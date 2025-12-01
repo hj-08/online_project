@@ -8,31 +8,26 @@ from sklearn.linear_model import LinearRegression
 import matplotlib.font_manager as fm
 import os
 
-# --- 한글 폰트 설정 수정: 시스템에 설치된 나눔고딕/말랑고딕/Noto Sans 사용을 시도 ---
+# --- 한글 폰트 설정 수정: packages.txt를 통해 NanumGothic을 설치하도록 가정 ---
 def set_korean_font():
     """시스템에 설치된 한글 폰트를 찾아 Matplotlib에 설정합니다."""
-    # 💡 Streamlit Cloud에서 한글 폰트 문제를 해결하려면,
-    # 프로젝트 루트 폴더에 'packages.txt' 파일을 생성하고,
-    # 'fonts-nanum'을 한 줄에 작성해 주면 됩니다.
+    # 💡 Streamlit Cloud에서 'packages.txt' 파일을 사용하여 fonts-nanum을 설치했다는 가정 하에,
+    # 가장 확실한 폰트 이름인 'NanumGothic' 또는 'DejaVu Sans'를 사용합니다.
     
     font_list = [f.name for f in fm.fontManager.ttflist]
     font_name = None
     
-    # 1. NanumGothic 계열 폰트 찾기 (Streamlit Cloud에서 자주 사용 가능)
-    for name in ["NanumGothic Bold", "NanumGothic", "NanumBarunGothic", "NanumSquare"]:
+    # 1. NanumGothic 계열 폰트 찾기 (설치 후 사용 가능)
+    for name in ["NanumGothic", "NanumGothic Bold", "NanumBarunGothic", "NanumSquare", "Noto Sans CJK KR"]:
         if name in font_list:
             font_name = name
             break
             
-    # 2. Noto Sans CJK KR 찾기 (리눅스에서 설치될 가능성 있음)
-    if not font_name and "Noto Sans CJK KR" in font_list:
-        font_name = "Noto Sans CJK KR"
-
-    # 3. Malgun Gothic 찾기 (Windows 환경)
+    # 2. Malgun Gothic 찾기 (Windows 환경)
     if not font_name and "Malgun Gothic" in font_list:
         font_name = "Malgun Gothic"
         
-    # 4. 최종 기본 폰트 설정
+    # 3. 최종 기본 폰트 설정
     if not font_name:
         font_name = "DejaVu Sans"
         # 폰트를 찾지 못했을 때 사용자에게 Streamlit Cloud 해결 방법을 안내
