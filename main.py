@@ -48,13 +48,13 @@ font_prop = set_korean_font() # 폰트 설정 함수 실행
 # --- 미세먼지 공공 데이터 API 키 ---
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
 
-def fetch_air_data(station_name, num_rows=24): # API 데이터 요청 함수 (기본값 24시간)
+def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     """주어진 '측정소 이름'의 미세먼지 데이터를 API로 요청하고 받아오는 함수."""
     URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty" # API 엔드포인트 URL
     params = { # API 요청에 필요한 파라미터 설정
         'serviceKey': API_KEY, 
         'returnType': 'json', 
-        'numOfRows': num_rows, # 요청 데이터 개수 (24개로 고정)
+        'numOfRows': num_rows, 
         'stationName': station_name, 
         'dataTerm': 'DAILY',
         'ver': '1.3'
@@ -65,6 +65,7 @@ def fetch_air_data(station_name, num_rows=24): # API 데이터 요청 함수 (�
     
     data = r.json() # JSON 응답을 딕셔너리로 변환
     
+    # <<< 오류 수정 지점: 'payload' 대신 'body'라는 올바른 키를 사용합니다. >>>
     items = data['response']['body']['items'] 
     
     return items # 데이터 목록 반환
@@ -74,22 +75,12 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
     times = [] # 시간 정보를 저장할 리스트
     values = [] # 농도 값을 저장할 리스트
     
-    error_injected = False # 오류 주입 플래그
-    
     for it in items: # 데이터 항목 반복 처리
         t = it.get('dataTime') # 측정 시간 추출
         val = it.get(key) # 농도 값 추출
         
         try: # 값 변환 시도
             v = float(val) # 농도 값을 실수형으로 변환
-            
-            # === 오류 유발 코드 (버그 보장) ===
-            # 첫 번째 유효한 데이터에 문자열을 저장하여 이후 데이터 테이블(st.dataframe)에서 TypeError를 발생시킵니다.
-            if not error_injected:
-                 v = "ERROR_VAL" # 숫자 대신 문자열을 목록에 강제 삽입
-                 error_injected = True
-            # === 오류 유발 코드 끝 ===
-            
         except: # 변환 실패 시
             continue # 다음 항목으로 건너뛰기
         
@@ -109,36 +100,18 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
-def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 예측 함수
-    """선형 회귀 모델로 다음 n_hours 시간 뒤의 농도 값들을 예측하고, 해당 시간대 리스트와 함께 반환하는 함수."""
-    # 예측을 위해서는 숫자 값만 필요하므로, 여기서 미리 숫자 값만 필터링합니다.
-    numeric_values = [v for v in values if isinstance(v, (int, float))]
-
-    if len(numeric_values) < 3: # 데이터 부족 시 예측 불가
-        return None, None, None
+def linear_regression_predict(values): # 선형 회귀 예측 함수
+    """선형 회귀 모델로 다음 1시간 뒤의 농도 값을 예측하는 함수."""
+    if len(values) < 3: # 데이터 부족 시 예측 불가
+        return None
         
-    try: 
-        X = np.arange(len(numeric_values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
-        y = np.array(numeric_values) # Y축(농도 값) 데이터 준비 
-    except ValueError:
-        st.warning("경고: 예측 데이터 준비 중 오류가 발생했습니다. 예측을 건너뜁니다.")
-        return None, None, None # 예측 불가능 상태 반환
+    X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
+    y = np.array(values) # Y축(농도 값) 데이터 준비
     
     model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
-    # Predict n_hours points (T+1, T+2, ..., T+n)
-    X_pred = np.arange(len(numeric_values), len(numeric_values) + n_hours).reshape(-1, 1)
-    predict_values = model.predict(X_pred)
-    
-    # 예측값이 음수가 되지 않도록 최소값을 1.0으로 설정 (사용자 요청 반영)
-    predict_values = np.maximum(1.0, predict_values)
-    
-    # Calculate the future times (times는 오류 값이 포함되어 있을 수 있으므로, 예측 시간에는 마지막 시간을 사용)
-    # 다만, times의 길이가 numeric_values의 길이와 다를 수 있으므로, 예측 시간에 사용되는 times[-1]은 마지막 측정 시간을 나타냅니다.
-    last_time = times[-1]
-    predict_times = [last_time + timedelta(hours=i) for i in range(1, n_hours + 1)]
-    
-    return predict_values, predict_times, model # 예측값 배열, 예측 시간 배열, 모델 객체 반환
+    pred = model.predict([[len(values)]])[0] # 다음 시점 값 예측
+    return pred # 예측값 반환
 
 # --- 미세먼지 등급 기준 정의 ---
 PM10_CRITERIA = { # PM10 기준 정의
@@ -177,8 +150,8 @@ def recommend_by_value(val, pm_type='PM10'): # 행동 추천 메시지 함수
 
 # --- Streamlit 웹 화면(UI) 구성 시작 ---
 
-st.title("🌫️ 실시간 미세먼지 분석 + 예측 (최근 24시간)") # 웹 앱 제목 수정
-st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다다. **예측은 향후 3시간을 기준으로 합니다.**") # 설명 텍스트
+st.title("🌫️ 실시간 미세먼지 분석 + 예측") # 웹 앱 제목
+st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다다.") # 설명 텍스트
 
 AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
     "서울": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
@@ -214,44 +187,44 @@ else: # 구/군 목록이 없을 경우
 
 pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0) # 측정 항목 라디오 버튼
 
-# 데이터 조회 기간은 '최근 24시간'으로 고정
-num_rows_to_fetch = 24
-n_forecast_hours = 3 # 예측 시간: 3시간으로 확장
-
+data_range = st.selectbox("데이터 조회 기간", # 데이터 조회 기간 선택
+                          ['최근 48시간', '지난 7일 (168시간)', '지난 30일 (720시간)'],
+                          index=0)
+    
 station = gu # 측정소 이름 설정
 
 if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 클릭 시
-    st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과 (최근 {num_rows_to_fetch}시간)") # 분석 결과 부제목 출력
+    st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과") # 분석 결과 부제목 출력
     
     data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value' # API 요청을 위한 데이터 키 설정
+    
+    num_rows_to_fetch = 48 # 기본 요청 데이터 개수 설정
+    if data_range == '지난 7일 (168시간)':
+        num_rows_to_fetch = 168
+    elif data_range == '지난 30일 (720시간)':
+        num_rows_to_fetch = 720 
     
     try: # 데이터 요청 및 오류 처리
         with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'): # 로딩 스피너 표시
             items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
-        # st.success("데이터 불러오기 성공!") # <<-- 이 줄이 제거되었습니다.
+        st.success("데이터 불러오기 성공!") # 성공 메시지
     except requests.HTTPError: # HTTP 오류 처리
-        st.error("데이터 요청 중 HTTP 오류가 발생했습니다. API 서버 상태를 확인하세요.")
-        st.stop()
+        st.error("데이터 요청 중 HTTP 오류가 발생했습니다.")
     except Exception as e: # 기타 오류 처리
         st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
         st.stop() 
 
     times, values = parse_pm(items, key=data_key) # 데이터 파싱
 
-    # 데이터 처리 개수 확인 메시지
-    if items:
-        st.info(f"요청한 데이터는 {num_rows_to_fetch}개, 실제 처리된 유효 데이터 포인트는 **{len(values)}**개입니다. (참고: 데이터에 **의도된 오류값(ERROR_VAL) 1개**가 포함되어 있습니다.)")
-    
-    # 예측 실행
-    predict_values, predict_times, model = linear_regression_predict(times, values, n_hours=n_forecast_hours)
-
-    if predict_values is None or not values:
+    if not values: # 유효한 데이터가 없을 경우
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다.")
+        st.stop() # 프로그램 중지
+        
+    if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
+        predict = linear_regression_predict(values) # 예측값 계산
+    else: # 장기 조회 시 예측 비활성화
         predict = None
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
-    else:
-        # 최종 예측값 (T+3)을 추천 기준으로 사용
-        predict = predict_values[-1]
-
+        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
 
     fig, ax = plt.subplots(figsize=(12,7)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
@@ -261,17 +234,9 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
-    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생할 수 있습니다. -> max() 함수 전에 숫자인 값만 필터링합니다.
-    numeric_values = [v for v in values if isinstance(v, (int, float))] # 숫자 값만 필터링
-    max_val = max(numeric_values) if numeric_values else 0 # 필터링된 데이터의 최대값
-    # 예측값 중 최대값도 포함하여 Y축 최대 범위를 계산
-    if predict_values is not None and len(predict_values) > 0:
-        max_pred_val = max(predict_values)
-        max_val = max(max_val, max_pred_val)
-
-    y_max_limit = max(max_val * 1.2, criteria['매우 나쁨'][0] * 1.2) # Y축 최대 범위 설정 (넉넉하게)
+    max_val = max(values) if values else 0 # 데이터 최대값
+    y_max_limit = max(max_val, criteria['매우 나쁨'][0]) * 1.5 # Y축 최대 범위 설정
     
-    # Y축 최소값도 0 대신 1로 시작하는 것을 고려할 수 있지만, 그래프의 시각적 연속성을 위해 0부터 시작하도록 유지
     ax.set_ylim(0, y_max_limit) # Y축 범위 적용
     
     ax.axhspan(criteria['매우 나쁨'][0], y_max_limit, facecolor='red', alpha=0.1, label='매우 나쁨') # 매우 나쁨 영역 표시
@@ -279,56 +244,41 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.set_facecolor('#f9f9f9') # 그래프 배경색 설정
     ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1) # 그리드 선 추가
     
-    # 그래프에 사용될 숫자 값과 해당 시간만 필터링
-    plot_times = [t for t, v in zip(times, values) if isinstance(v, (int, float))]
-    plot_values = numeric_values
+    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
     
-    ax.plot(plot_times, plot_values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
-    
-    # 24시간 데이터에 대해 값 텍스트 표시
-    for x, y in zip(plot_times, plot_values):
-        ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') 
+    if num_rows_to_fetch <= 48: # 단기 조회 시 값 텍스트 표시
+        for x, y in zip(times, values):
+            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') # 각 점 위에 농도 값 표시
 
-    if predict_values is not None and plot_times: # 예측값이 있고 실측 그래프 데이터가 있을 경우
-        # Combine the last real point with the predicted points for plotting
-        plot_times_with_pred = [plot_times[-1]] + predict_times
-        plot_values_with_pred = [plot_values[-1]] + list(predict_values)
-        
-        ax.plot(plot_times_with_pred, plot_values_with_pred, 
+    if predict is not None: # 예측값이 있을 경우
+        next_time = times[-1] + timedelta(hours=1) # 예측 시간 (마지막 시간 + 1시간)
+        ax.plot([times[-1], next_time], 
+                [values[-1], predict], 
                 color='#f28500', marker='o', linestyle='--', linewidth=2, 
-                label=f'향후 {n_forecast_hours}시간 예측') 
+                label=f'예측값: {predict:.1f}') # 예측값 점선으로 표시
+        ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center') # 예측값 텍스트 표시
 
-        # Display the final predicted value text (T+3)
-        final_time = predict_times[-1]
-        final_value = predict_values[-1]
-        ax.text(final_time, final_value + 1.5, f"{final_value:.0f}", color='#f28500', fontsize=8, ha='center')
+    # X축 눈금 간격 설정
+    if num_rows_to_fetch <= 48:
+        xtick_interval = 2 # 2시간 간격
+    elif num_rows_to_fetch <= 168:
+        xtick_interval = 12 # 12시간 간격
+    else:
+        xtick_interval = 24 # 24시간 간격
 
-    # X축 눈금 간격 설정 (24시간 데이터에 대해 2시간 간격으로 고정)
-    xtick_interval = 2 # 2시간 간격
-        
     tick_indices = np.arange(0, len(times), xtick_interval) # 눈금 인덱스 계산
     tick_times = [times[i] for i in tick_indices if i < len(times)] # 눈금 시간 객체 추출
     
-    # X축 눈금 레이블 형식 설정 (월-일 시:분)
-    tick_labels = [t.strftime("%m-%d %H:%M") for t in tick_times] 
+    # X축 눈금 레이블 형식 설정
+    if num_rows_to_fetch <= 48:
+        tick_labels = [t.strftime("%m-%d %H:%M") for t in tick_times] # 월-일 시:분
+    else:
+        tick_labels = [t.strftime("%Y-%m-%d") for t in tick_times] # 년-월-일
 
     ax.set_xticks(tick_times) # X축 눈금 위치 설정
     ax.set_xticklabels(tick_labels, rotation=45) # X축 레이블 표시 및 45도 회전
-    
-    # === X축 범위 강제 설정 ===
-    if times and predict_times:
-        start_time = times[0] # 첫 측정 시간
-        end_time = predict_times[-1] # 마지막 예측 시간 (T+3)
-        
-        # X축 범위를 명시적으로 설정하여 실측+예측 기간 전체를 표시합니다.
-        ax.set_xlim(start_time, end_time) 
-    elif times:
-         start_time = times[0]
-         end_time = times[-1]
-         ax.set_xlim(start_time, end_time)
-    # ========================
 
-    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이 (24시간 실측 + 3시간 예측)', fontsize=16, pad=20) # 그래프 제목
+    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이', fontsize=16, pad=20) # 그래프 제목
     ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)") # Y축 레이블
     ax.set_xlabel("측정 시간") # X축 레이블
     
@@ -345,49 +295,14 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            # !!! 데이터 테이블 표시 버그 유발 지점 (TypeError) !!!
-            # 'values'에 포함된 "ERROR_VAL" 문자열을 f-string으로 실수(.1f) 포맷하려 하면 TypeError가 발생합니다.
             f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
 
-    st.subheader("📌 예측 결과 (향후 3시간)") # 예측 결과 부제목
-    
-    if predict_values is not None and values: # 예측값과 실측값이 모두 있을 경우
-        # 안전한 계산을 위해 숫자 값만 필터링합니다. 
-        last_numeric_value = [v for v in values if isinstance(v, (int, float))][-1]
-        last_time = times[-1]
-        
-        st.markdown(f"**직전 측정값 ({last_time.strftime('%H:%M')})**: **{last_numeric_value:.1f} ㎍/m³**")
-        st.markdown("---")
-        
-        for i in range(n_forecast_hours):
-            current_time = predict_times[i]
-            predicted_value = predict_values[i]
-            change = predicted_value - last_numeric_value
-            
-            # 변화량에 따른 아이콘과 색상 설정
-            if change > 0.5: # 0.5 초과 시 증가
-                change_text = f"▲ {abs(change):.1f} ㎍/m³ 증가"
-                color = "red"
-            elif change < -0.5: # -0.5 미만 시 감소
-                change_text = f"▼ {abs(change):.1f} ㎍/m³ 감소"
-                color = "blue"
-            else: # 그 외 (거의 변화 없음)
-                change_text = "↔ 변화 거의 없음"
-                color = "gray"
-            
-            st.markdown(
-                f"**{i+1}시간 뒤 ({current_time.strftime('%H:%M')})** : "
-                f"예측값 **{predicted_value:.1f} ㎍/m³** "
-                f"(<span style='color:{color}'>**{change_text}**</span>)",
-                unsafe_allow_html=True
-            )
-
-        st.markdown("---")
-        # 최종 (3시간 뒤) 예측값을 기준으로 한 행동 추천
-        st.markdown(f"**최종 예측 ({predict_times[-1].strftime('%H:%M')}) 기준**")
-        st.info(recommend_by_value(predict_values[-1], pm_type=pm_type))
-    else:
-        st.warning("데이터 부족으로 인해 예측값을 계산할 수 없습니다.") # 경고 메시지
+    st.subheader("📌 예측 결과") # 예측 결과 부제목
+    if predict is not None: # 예측값이 있을 경우
+        st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 예측 농도 값 출력
+        st.info(recommend_by_value(predict, pm_type=pm_type)) # 행동 추천 메시지 출력
+    else: # 예측값이 없을 경우
+        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없습니다.") # 경고 메시지
