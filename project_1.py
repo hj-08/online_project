@@ -202,7 +202,7 @@ else:
     st.warning("선택된 시/도에 대한 측정소 목록이 없습니다. 직접 입력해주세요.")
 
 # 4. PM10/PM2.5 선택
-pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0)
+pm_type = st.radio("측정 항목 선택", ('PM10(미세먼지)', 'PM2.5(초미세먼지)'), index=0)
     
 station = gu # 측정소 이름으로 사용
 
