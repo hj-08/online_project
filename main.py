@@ -46,6 +46,7 @@ font_prop = set_korean_font() # 폰트 설정 함수 실행
 
 
 # --- 미세먼지 공공 데이터 API 키 ---
+# 실제 동작을 위해서는 유효한 API 키가 필요하지만, 오류 주입을 위해 임시로 플레이스홀더를 사용합니다.
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
 
 def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
@@ -64,7 +65,11 @@ def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
     r.raise_for_status() # HTTP 오류 발생 시 예외 처리
     
     data = r.json() # JSON 응답을 딕셔너리로 변환
-    items = data['response']['body']['items'] # 실제 측정 데이터 목록 추출
+    
+    # >>> 오류 주입 지점: 'body' 대신 'payload'라는 존재하지 않는 키를 사용
+    # 이로 인해 KeyError가 발생합니다.
+    items = data['response']['payload']['items'] 
+    
     return items # 데이터 목록 반환
 
 def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
@@ -172,7 +177,7 @@ AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
 
 default_city = "서울"
 city = st.selectbox("시/도 선택", list(AIR_STATION_MAP.keys()), # 시/도 선택 드롭다운
-                    index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
+                     index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
 
 district_options = AIR_STATION_MAP.get(city, []) # 선택된 시/도의 구/군 목록 가져오기
 
@@ -209,6 +214,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.error("데이터 요청 중 HTTP 오류가 발생했습니다.")
         st.stop() # 프로그램 중지
     except Exception as e: # 기타 오류 처리
+        # KeyError가 발생하면 이 곳에서 잡히게 됩니다.
         st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
         st.stop() 
 
