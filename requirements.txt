@@ -1,18 +1,5 @@
 streamlit
-
-# 기본 분석 도구
-pandas
-numpy
-
-# 시각화 라이브러리
+requests
 matplotlib
-seaborn
-
-# 선택적 머신러닝 (sklearn 에러났으니까 포함)
 scikit-learn
-
-# 지도( folium ) 쓸 때
-folium
-
-# 파일 처리
-openpyxl
+numpy
