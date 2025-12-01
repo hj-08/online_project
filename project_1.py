@@ -32,7 +32,6 @@ def set_korean_font(): # 한글 폰트 설정 메인 함수
     if font_name: # 폰트 검색 성공 시 설정
         plt.rcParams['font.family'] = font_name # Matplotlib 폰트 설정
         plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지
-        st.sidebar.success(f"한글 폰트 설정 완료: {font_name}") # 성공 메시지 출력
         
         font_prop = fm.FontProperties(family=font_name) # 폰트 속성 객체 생성
     else: # 폰트 검색 실패 시
