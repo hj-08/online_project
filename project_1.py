@@ -121,16 +121,38 @@ def linear_regression_predict(values):
     pred = model.predict([[len(values)]])[0] 
     return pred
 
-def recommend_by_value(val):
-    """PM10 값에 따른 추천 등급과 메시지를 반환합니다."""
+# PM10 기준
+PM10_CRITERIA = {
+    '좋음': (0, 30),
+    '보통': (31, 80),
+    '나쁨': (81, 150),
+    '매우 나쁨': (151, float('inf'))
+}
+
+# PM2.5 기준 (추가)
+PM25_CRITERIA = {
+    '좋음': (0, 15),
+    '보통': (16, 35),
+    '나쁨': (36, 75),
+    '매우 나쁨': (76, float('inf'))
+}
+
+def get_grade_criteria(pm_type):
+    """PM 타입에 맞는 기준을 반환합니다."""
+    return PM10_CRITERIA if pm_type == 'PM10' else PM25_CRITERIA
+
+def recommend_by_value(val, pm_type='PM10'):
+    """PM 값과 타입에 따른 추천 등급과 메시지를 반환합니다."""
     if val is None:
         return "예측값을 계산할 수 없습니다."
+    
+    criteria = get_grade_criteria(pm_type)
         
-    if val > 150:
+    if val >= criteria['매우 나쁨'][0]:
         return "🔥 매우 나쁨: 외출 자제, 실내 활동 권장"
-    if val > 80:
+    if val >= criteria['나쁨'][0]:
         return "⚠️ 나쁨: 장시간 외출 피하고 마스크 착용"
-    if val > 30:
+    if val >= criteria['보통'][0]:
         return "🙂 보통: 민감군은 주의, 가벼운 외출 가능"
         
     return "🌿 좋음: 외부 활동 안전"
@@ -178,10 +200,18 @@ if district_options:
 else:
     gu = st.text_input("구/군 (측정소) 입력 (목록 없음)", "")
     st.warning("선택된 시/도에 대한 측정소 목록이 없습니다. 직접 입력해주세요.")
+
+# 4. PM10/PM2.5 선택
+pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0)
     
 station = gu # 측정소 이름으로 사용
 
 if st.button("분석 시작", key="analyze_button"):
+    st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과") # 현재 위치 정보 표시
+    
+    # PM 타입에 따라 데이터 필드 이름 설정
+    data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value'
+    
     try:
         with st.spinner('데이터 불러오는 중...'):
             items = fetch_air_data(station, num_rows=50)
@@ -193,23 +223,35 @@ if st.button("분석 시작", key="analyze_button"):
         st.error(f"데이터 요청 중 오류 발생: {e}")
         st.stop()
 
-    times, values = parse_pm(items)
+    times, values = parse_pm(items, key=data_key)
 
     if not values:
-        st.warning(f"측정소 '{station}'에 대한 유효한 PM10 데이터가 없습니다. 지역명을 다시 확인해주세요.")
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다. 지역명을 다시 확인해주세요.")
         st.stop()
         
     predict = linear_regression_predict(values)
 
     # --- Matplotlib 시각화 ---
-    # 그래프 크기를 (12, 6)으로 키움
+    # 그래프 크기를 (12, 6)으로 유지
     fig, ax = plt.subplots(figsize=(12, 6))
+    criteria = get_grade_criteria(pm_type)
+    
+    # 1. 미세먼지 기준선 (배경 색상 및 라벨) 추가
+    # '좋음' 영역 (초록)
+    ax.axhspan(criteria['좋음'][0], criteria['좋음'][1], facecolor='green', alpha=0.1, label='좋음')
+    # '보통' 영역 (노랑)
+    ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
+    # '나쁨' 영역 (주황)
+    ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
+    # '매우 나쁨' 영역 (빨강)
+    ax.axhspan(criteria['매우 나쁨'][0], criteria['매우 나쁨'][0] + 50, facecolor='red', alpha=0.1, label='매우 나쁨')
+
 
     ax.set_facecolor('#f9f9f9')
     ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1)
-
+    
     # 실측 데이터 플롯
-    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label='실측 PM10')
+    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}')
     
     # 데이터 포인트 위에 값 표시
     for x, y in zip(times, values):
@@ -229,15 +271,16 @@ if st.button("분석 시작", key="analyze_button"):
     ax.set_xticks(times[::2])
     ax.set_xticklabels([t.strftime("%m-%d %H:%M") for t in times[::2]], rotation=45)
 
-    # Y축 레이블 설정
-    ax.set_ylabel("PM10 (㎍/m³)")
+    # Y축 레이블 설정 (PM 타입에 따라 변경)
+    ax.set_ylabel(f"{pm_type} (㎍/m³)")
     
     # 범례에 폰트 속성 적용 (font_prop이 None이 아닐 경우)
     if font_prop:
-        ax.legend(frameon=False, prop=font_prop)
+        # 배경색 기준선 라벨 포함하여 범례 표시
+        ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.02, 1), borderaxespad=0.)
     else:
-        ax.legend(frameon=False) 
-
+        ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.02, 1), borderaxespad=0.) 
+        
     plt.tight_layout()
 
     st.pyplot(fig)
@@ -245,7 +288,8 @@ if st.button("분석 시작", key="analyze_button"):
     # --- 예측 결과 표시 ---
     st.subheader("📌 예측 결과")
     if predict is not None:
-        st.write(f"다음 PM10 예측값: **{predict:.1f} ㎍/m³**")
-        st.info(recommend_by_value(predict))
+        # 예측값과 PM 타입을 함께 출력
+        st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**")
+        st.info(recommend_by_value(predict, pm_type=pm_type))
     else:
         st.warning("데이터 부족으로 예측값을 계산할 수 없습니다.")
