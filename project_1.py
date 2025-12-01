@@ -11,27 +11,37 @@ import os
 # --- 한글 폰트 설정 수정: packages.txt를 통해 NanumGothic을 설치하도록 가정 ---
 def set_korean_font():
     """시스템에 설치된 한글 폰트를 찾아 Matplotlib에 설정합니다."""
-    # 💡 Streamlit Cloud에서 'packages.txt' 파일을 사용하여 fonts-nanum을 설치했다는 가정 하에,
-    # 가장 확실한 폰트 이름인 'NanumGothic' 또는 'DejaVu Sans'를 사용합니다.
     
-    font_list = [f.name for f in fm.fontManager.ttflist]
-    font_name = None
-    
-    # 1. NanumGothic 계열 폰트 찾기 (설치 후 사용 가능)
-    for name in ["NanumGothic", "NanumGothic Bold", "NanumBarunGothic", "NanumSquare", "Noto Sans CJK KR"]:
-        if name in font_list:
-            font_name = name
-            break
-            
-    # 2. Malgun Gothic 찾기 (Windows 환경)
-    if not font_name and "Malgun Gothic" in font_list:
-        font_name = "Malgun Gothic"
+    # 폰트 검색 로직을 별도 함수로 분리
+    def find_font_name():
+        font_list = [f.name for f in fm.fontManager.ttflist]
         
-    # 3. 최종 기본 폰트 설정
+        # NanumGothic 계열, Noto Sans, Malgun Gothic 순으로 검색
+        for name in ["NanumGothic", "NanumGothic Bold", "NanumBarunGothic", "NanumSquare", "Noto Sans CJK KR", "Malgun Gothic"]:
+            if name in font_list:
+                return name
+        return None
+
+    font_name = find_font_name()
+    
+    # 폰트가 발견되지 않았을 경우, 캐시를 지우고 다시 시도 (Streamlit 환경에서 필수)
+    if not font_name:
+        # 이 부분은 Canvas 환경에서는 경고가 계속 나올 수 있지만, Streamlit Cloud 배포 시 해결을 위한 코드입니다.
+        try:
+            cache_dir = fm.get_cachedir()
+            for filename in os.listdir(cache_dir):
+                if filename.startswith('fontlist-'):
+                    os.remove(os.path.join(cache_dir, filename))
+            
+            fm.fontManager._rebuild()
+            font_name = find_font_name() # 다시 폰트 이름 찾기
+        except Exception:
+            pass # 권한 오류 등 무시
+
+    # 4. 최종 기본 폰트 설정
     if not font_name:
         font_name = "DejaVu Sans"
-        # 폰트를 찾지 못했을 때 사용자에게 Streamlit Cloud 해결 방법을 안내
-        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없습니다. 기본 폰트({font_name}) 사용. (Streamlit Cloud 사용 시 'packages.txt'에 'fonts-nanum' 추가 필요)")
+        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없습니다. 기본 폰트({font_name}) 사용. (Streamlit Cloud 사용 시 'packages.txt'에 'fonts-nanum' 추가 및 **재배포** 필요)")
         font_prop = None
     else:
         # 찾은 폰트로 Matplotlib 설정
@@ -130,8 +140,28 @@ def recommend_by_value(val):
 st.title("🌫️ 실시간 미세먼지 분석 + 예측")
 st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다.")
 
-city = st.text_input("시/도 입력", "서울")
-gu = st.text_input("구/군 입력", "강남구")
+# 주요 도시/측정소 매핑
+AIR_STATION_MAP = {
+    "서울": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
+    "경기": ["수원", "성남", "안양", "안산", "용인", "평택", "고양", "남양주", "의정부", "광명", "화성", "파주", "시흥"]
+}
+
+# 1. 시/도 선택 (드롭다운)
+default_city = "서울"
+city = st.selectbox("시/도 선택", list(AIR_STATION_MAP.keys()), 
+                    index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
+
+# 2. 선택된 시/도에 따라 구/군 목록 업데이트
+district_options = AIR_STATION_MAP.get(city, [])
+
+# 3. 구/군 (측정소) 선택 (드롭다운)
+if district_options:
+    gu = st.selectbox("구/군 (측정소) 선택", district_options, 
+                      index=district_options.index("강남구") if "강남구" in district_options else 0)
+else:
+    gu = st.text_input("구/군 (측정소) 입력 (목록 없음)", "")
+    st.warning("선택된 시/도에 대한 측정소 목록이 없습니다. 직접 입력해주세요.")
+    
 station = gu # 측정소 이름으로 사용
 
 if st.button("분석 시작", key="analyze_button"):
