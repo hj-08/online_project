@@ -224,7 +224,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         predict = None
         st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다.")
 
-    fig, ax = plt.subplots(figsize=(10,3)) # 그래프 영역 설정
+    fig, ax = plt.subplots(figsize=(12,5)) # 그래프 영역 설정
     criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
     
     # 등급별 배경색 영역 표시 (좋음, 보통, 나쁨)
