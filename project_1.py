@@ -73,6 +73,11 @@ def fetch_air_data(station_name, num_rows=48):
         'dataTerm': 'DAILY',
         'ver': '1.3'
     }
+    # num_rows가 1000을 초과하면 API에서 오류가 발생할 수 있습니다.
+    if num_rows > 1000:
+        st.error("API의 제약으로 인해 최대 1000개까지만 데이터를 조회할 수 있습니다.")
+        params['numOfRows'] = 1000
+        
     r = requests.get(URL, params=params, timeout=10)
     r.raise_for_status() # HTTP 오류 발생 시 예외 발생
     data = r.json()
@@ -202,7 +207,12 @@ else:
     st.warning("선택된 시/도에 대한 측정소 목록이 없습니다. 직접 입력해주세요.")
 
 # 4. PM10/PM2.5 선택
-pm_type = st.radio("측정 항목 선택", ('PM10(미세먼지)', 'PM2.5(초미세먼지)'), index=0)
+pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0)
+
+# 5. [NEW] 데이터 조회 기간 선택
+data_range = st.selectbox("데이터 조회 기간", 
+                          ['최근 48시간', '지난 7일 (168시간)', '지난 30일 (720시간)'],
+                          index=0)
     
 station = gu # 측정소 이름으로 사용
 
@@ -212,9 +222,17 @@ if st.button("분석 시작", key="analyze_button"):
     # PM 타입에 따라 데이터 필드 이름 설정
     data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value'
     
+    # 선택된 기간에 따라 num_rows 설정
+    num_rows_to_fetch = 48 # 기본값
+    if data_range == '지난 7일 (168시간)':
+        num_rows_to_fetch = 168
+    elif data_range == '지난 30일 (720시간)':
+        # API 제약으로 인해 최대 1000개만 가져올 수 있습니다. 720은 1000 미만이므로 안전합니다.
+        num_rows_to_fetch = 720
+    
     try:
-        with st.spinner('데이터 불러오는 중...'):
-            items = fetch_air_data(station, num_rows=50)
+        with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'):
+            items = fetch_air_data(station, num_rows=num_rows_to_fetch)
         st.success("데이터 불러오기 성공!")
     except requests.HTTPError:
         st.error("데이터 요청 중 HTTP 오류가 발생했습니다. 지역명 또는 API 키를 확인하세요.")
@@ -229,7 +247,13 @@ if st.button("분석 시작", key="analyze_button"):
         st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다. 지역명을 다시 확인해주세요.")
         st.stop()
         
-    predict = linear_regression_predict(values)
+    # 데이터가 72개(3일) 미만이면 장기 예측의 신뢰도가 낮으므로 선형 회귀는 짧은 기간에만 적용
+    if num_rows_to_fetch <= 48:
+        predict = linear_regression_predict(values)
+    else:
+        predict = None
+        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다. (선형 회귀는 단기 예측에 더 적합합니다)")
+
 
     # --- Matplotlib 시각화 ---
     # 그래프 크기를 (14, 7)로 확장
@@ -260,10 +284,10 @@ if st.button("분석 시작", key="analyze_button"):
     # 실측 데이터 플롯
     ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}')
     
-    # 데이터 포인트 위에 값 표시
-    for x, y in zip(times, values):
-        # 숫자가 겹치지 않도록 Y축 상단에 텍스트를 배치 (기존 +1.5 유지)
-        ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
+    # 데이터 포인트 위에 값 표시 (최근 24개만 표시하여 그래프 혼잡도 줄임)
+    if num_rows_to_fetch <= 48:
+        for x, y in zip(times, values):
+            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
 
     # 예측값 플롯
     if predict is not None:
@@ -274,16 +298,36 @@ if st.button("분석 시작", key="analyze_button"):
                 label=f'예측값: {predict:.1f}')
         ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center')
 
-    # X축 눈금 설정 (2시간 간격)
-    ax.set_xticks(times[::2])
-    ax.set_xticklabels([t.strftime("%m-%d %H:%M") for t in times[::2]], rotation=45)
+    # X축 눈금 설정 (기간에 따라 간격 조정)
+    if num_rows_to_fetch <= 48:
+        # 48시간: 2시간 간격
+        xtick_interval = 2
+    elif num_rows_to_fetch <= 168:
+        # 7일: 12시간 간격
+        xtick_interval = 12
+    else:
+        # 30일: 24시간 간격 (일 단위)
+        xtick_interval = 24
+
+    # 인덱스 계산을 위해 1시간당 인덱스 1로 가정
+    tick_indices = np.arange(0, len(times), xtick_interval)
+    tick_times = [times[i] for i in tick_indices if i < len(times)]
+    
+    if num_rows_to_fetch <= 48:
+        # 48시간: HH:MM 형식
+        tick_labels = [t.strftime("%m-%d %H:%M") for t in tick_times]
+    else:
+        # 장기: YYYY-MM-DD 형식
+        tick_labels = [t.strftime("%Y-%m-%d") for t in tick_times]
+
+    ax.set_xticks(tick_times)
+    ax.set_xticklabels(tick_labels, rotation=45)
 
     # Y축 레이블 설정 (PM 타입에 따라 변경)
     ax.set_ylabel(f"{pm_type} (㎍/m³)")
     
-    # 범례에 폰트 속성 적용 (font_prop이 None이 아닐 경우)
+    # 범례 설정
     if font_prop:
-        # 배경색 기준선 라벨 포함하여 범례 표시
         ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.02, 1), borderaxespad=0.)
     else:
         ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.02, 1), borderaxespad=0.) 
@@ -292,6 +336,19 @@ if st.button("분석 시작", key="analyze_button"):
 
     st.pyplot(fig)
     
+    # --- 실측 데이터 테이블 표시 ---
+    if times and values:
+        st.subheader("📋 실측 데이터 테이블")
+        
+        # Streamlit의 st.dataframe을 사용해 데이터를 표로 깔끔하게 표시
+        data_to_display = {
+            "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
+            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values] # 소수점 첫째 자리까지 표시
+        }
+        
+        st.dataframe(data_to_display, use_container_width=True)
+
+
     # --- 예측 결과 표시 ---
     st.subheader("📌 예측 결과")
     if predict is not None:
@@ -299,4 +356,4 @@ if st.button("분석 시작", key="analyze_button"):
         st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**")
         st.info(recommend_by_value(predict, pm_type=pm_type))
     else:
-        st.warning("데이터 부족으로 예측값을 계산할 수 없습니다.")
+        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없습니다.")
