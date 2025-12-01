@@ -8,7 +8,7 @@ import streamlit as st
 from datetime import datetime
 from sklearn.linear_model import LinearRegression
 
-API_KEY = "여기에_네_API키_입력"
+API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e"
 
 def fetch_air_data(station_name, num_rows=48):
     URL = "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty"
