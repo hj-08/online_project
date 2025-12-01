@@ -244,7 +244,14 @@ if st.button("분석 시작", key="analyze_button"):
     # '나쁨' 영역 (주황)
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     # '매우 나쁨' 영역 (빨강)
-    ax.axhspan(criteria['매우 나쁨'][0], criteria['매우 나쁨'][0] + 50, facecolor='red', alpha=0.1, label='매우 나쁨')
+    # y축 최대값에 여유를 주기 위해 50이 아닌 50%를 추가하여 더 유연하게 설정
+    max_val = max(values) if values else 0
+    y_max_limit = max(max_val, criteria['매우 나쁨'][0]) * 1.5 # 최대값의 150% 또는 나쁨 기준 중 큰 값
+    
+    # Y축 범위 설정: 0부터 최대값에 여유를 둔 값까지
+    ax.set_ylim(0, y_max_limit)
+    
+    ax.axhspan(criteria['매우 나쁨'][0], y_max_limit, facecolor='red', alpha=0.1, label='매우 나쁨')
 
 
     ax.set_facecolor('#f9f9f9')
@@ -255,7 +262,7 @@ if st.button("분석 시작", key="analyze_button"):
     
     # 데이터 포인트 위에 값 표시
     for x, y in zip(times, values):
-        # 숫자가 겹치지 않도록 Y축 상단에 텍스트를 배치
+        # 숫자가 겹치지 않도록 Y축 상단에 텍스트를 배치 (기존 +1.5 유지)
         ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
 
     # 예측값 플롯
