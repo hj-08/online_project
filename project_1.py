@@ -14,8 +14,6 @@ import matplotlib.font_manager as fm
 font_list = [f.name for f in fm.fontManager.ttflist]
 if "Malgun Gothic" in font_list:
     font_name = "Malgun Gothic"
-elif "NanumGothic" in font_list:
-    font_name = "NanumGothic"
 else:
     font_name = "DejaVu Sans"
 
