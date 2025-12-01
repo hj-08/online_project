@@ -1,188 +1,157 @@
-import requests # 웹에서 데이터를 가져오기 위한 라이브러리
-import json # JSON 형식 데이터를 다루기 위한 라이브러리
-import matplotlib.pyplot as plt # 그래프를 그리기 위한 라이브러리
-import numpy as np # 수학적 계산(배열 처리)을 위한 라이브러리
-import streamlit as st # 웹 애플리케이션 UI를 만들기 위한 라이브러리
-from datetime import datetime, timedelta # 날짜와 시간 계산을 위한 모듈
-from sklearn.linear_model import LinearRegression # 선형 회귀 모델(예측)을 위한 모듈
-import matplotlib.font_manager as fm # Matplotlib의 폰트 설정을 위한 모듈
-import os # 운영체제 기능(파일 경로 등)을 다루기 위한 모듈
+import requests # HTTP 요청 라이브러리
+import json # JSON 파싱 라이브러리
+import matplotlib.pyplot as plt # 그래프 시각화 모듈
+import numpy as np # 숫자 배열 및 계산 모듈
+import streamlit as st # 웹 앱 UI 구축 모듈
+from datetime import datetime, timedelta # 날짜/시간 처리 모듈
+from sklearn.linear_model import LinearRegression # 선형 회귀 예측 모델
+import matplotlib.font_manager as fm # 폰트 관리 모듈
+import os # 기본 OS 모듈 (여기서는 사용되지 않음)
 
-# --- 한글 폰트 설정 수정: packages.txt를 통해 NanumGothic을 설치하도록 가정 ---
-def set_korean_font():
-    """시스템에 설치된 한글 폰트를 찾아 Matplotlib에 설정합니다."""
+# --- 한글 폰트 설정 함수 정의 ---
+def set_korean_font(): # 한글 폰트 설정 메인 함수
+    """그래프에서 한글 깨짐을 방지하고 폰트를 설정하는 메인 함수야."""
     
-    # 폰트 검색 로직을 별도 함수로 분리
-    def find_font_name():
-        font_list = [f.name for f in fm.fontManager.ttflist]
+    # 폰트 이름을 찾는 함수
+    def find_font_name(): # 폰트 이름 검색 도우미 함수
+        """시스템에 설치된 한글 폰트 이름을 찾아서 돌려줘."""
         
-        # NanumGothic 계열, Noto Sans, Malgun Gothic 순으로 검색하여 사용 가능한 폰트를 찾습니다.
-        for name in ["NanumGothic", "NanumGothic Bold", "NanumBarunGothic", "NanumSquare", "Noto Sans CJK KR", "Malgun Gothic"]:
+        # 컴퓨터에 설치된 폰트 목록 확인
+        font_list = [f.name for f in fm.fontManager.ttflist] # 폰트 이름 리스트 추출
+        
+        # 한글 폰트 이름을 검색
+        for name in ["NanumGothic", "Malgun Gothic", "Noto Sans CJK KR"]:
+            # 한글 폰트 이름을 검색
             if name in font_list:
-                return name
-        return None
+                return name # 폰트 이름 반환
+        return None # 폰트 찾기 실패
 
-    font_name = find_font_name()
+    font_name = find_font_name() 
     
-    # 폰트가 발견되지 않았을 경우, 캐시를 지우고 다시 시도 (Streamlit 환경에서 필수)
-    if not font_name:
-        # 이 부분은 Canvas 환경에서는 경고가 계속 나올 수 있지만, Streamlit Cloud 배포 시 해결을 위한 코드입니다.
-        try:
-            cache_dir = fm.get_cachedir()
-            # 폰트 캐시 파일 삭제 후
-            for filename in os.listdir(cache_dir):
-                if filename.startswith('fontlist-'):
-                    os.remove(os.path.join(cache_dir, filename))
-            
-            fm.fontManager._rebuild() # 폰트 매니저를 재구축하고
-            font_name = find_font_name() # 다시 폰트 이름 찾기 시도
-        except Exception:
-            pass # 권한 오류 등 무시
-
-    # 4. 최종 기본 폰트 설정
-    if not font_name:
-        font_name = "DejaVu Sans"
-        # 한글 폰트가 없을 경우 경고 메시지와 함께 기본 폰트(영어 전용)를 사용합니다.
-        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없습니다. 기본 폰트({font_name}) 사용. (Streamlit Cloud 사용 시 'packages.txt'에 'fonts-nanum' 추가 및 **재배포** 필요)")
-        font_prop = None
-    else:
-        # 찾은 폰트로 Matplotlib 설정
-        plt.rcParams['font.family'] = font_name # 폰트 패밀리 설정
-        plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
+    # 폰트를 찾았을때 실행되는 코드
+    if font_name: # 폰트 검색 성공 시 설정
+        plt.rcParams['font.family'] = font_name # Matplotlib 폰트 설정
+        plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지
         st.sidebar.success(f"한글 폰트 설정 완료: {font_name}") # 성공 메시지 출력
-        # font_prop 생성 (범례 등 특정 요소에 폰트를 적용하기 위해 필요)
-        font_prop = fm.FontProperties(family=font_name)
+        
+        font_prop = fm.FontProperties(family=font_name) # 폰트 속성 객체 생성
+    else: # 폰트 검색 실패 시
+        font_name = "DejaVu Sans" # 기본 영문 폰트 사용
+        st.sidebar.warning(f"적절한 한글 폰트를 찾을 수 없어. 기본 폰트({font_name}) 사용.") # 경고 메시지 출력
+        font_prop = None # 폰트 속성 없음
 
-    plt.rcParams['axes.unicode_minus'] = False # 최종 설정 확인 (마이너스 깨짐 방지)
-    return font_prop
+    plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 깨짐 방지 재확인
+    return font_prop # 폰트 속성 반환
 
-# 폰트 설정 실행 및 font_prop 변수에 저장
-font_prop = set_korean_font()
+font_prop = set_korean_font() # 폰트 설정 함수 실행
 
 
-# --- API KEY (공개 API 키이므로 그대로 사용) ---
-API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # 미세먼지 공공 데이터 포털 API 키
+# --- 미세먼지 공공 데이터 API 키 ---
+API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
 
-def fetch_air_data(station_name, num_rows=48):
-    """실시간 측정소별 미세먼지 데이터를 가져옵니다."""
-    URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty" # API 엔드포인트
-    params = {
-        'serviceKey': API_KEY, # 인증키
-        'returnType': 'json', # 응답 데이터 형식
-        'numOfRows': num_rows, # 조회할 데이터 개수 (시간당 1개)
-        'pageNo': 1, # 페이지 번호
-        'stationName': station_name, # 측정소 이름
-        'dataTerm': 'DAILY', # 데이터 기간 (하루 단위)
-        'ver': '1.3' # API 버전
+def fetch_air_data(station_name, num_rows=48): # API 데이터 요청 함수
+    """주어진 '측정소 이름'의 미세먼지 데이터를 API로 요청하고 받아오는 함수."""
+    URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty" # API 엔드포인트 URL
+    params = { # API 요청에 필요한 파라미터 설정
+        'serviceKey': API_KEY, 
+        'returnType': 'json', 
+        'numOfRows': num_rows, 
+        'stationName': station_name, 
+        'dataTerm': 'DAILY',
+        'ver': '1.3'
     }
     
-    # API 제약사항 처리: 최대 1000개까지만 데이터를 조회할 수 있습니다.
-    if num_rows > 1000:
-        st.error("API의 제약으로 인해 최대 1000개까지만 데이터를 조회할 수 있습니다.")
-        params['numOfRows'] = 1000 # 최대치로 제한
-        
-    # API 요청을 보내고 응답을 받습니다.
-    r = requests.get(URL, params=params, timeout=10)
-    r.raise_for_status() # HTTP 오류(4xx, 5xx) 발생 시 예외 발생
+    r = requests.get(URL, params=params, timeout=10) # API 요청 및 응답 받기
+    r.raise_for_status() # HTTP 오류 발생 시 예외 처리
     
-    # JSON 응답을 파싱합니다.
-    data = r.json()
-    items = data['response']['body']['items'] # 실제 측정 데이터 목록
-    return items
+    data = r.json() # JSON 응답을 딕셔너리로 변환
+    items = data['response']['body']['items'] # 실제 측정 데이터 목록 추출
+    return items # 데이터 목록 반환
 
-def parse_pm(items, key='pm10Value'):
-    """데이터 항목 리스트에서 시간과 PM 값을 파싱하여 시간 순서대로 반환합니다."""
-    times = [] # 시간 리스트
-    values = [] # 미세먼지 값 리스트
-    for it in items:
-        t = it.get('dataTime') # 측정 시간 문자열
-        val = it.get(key) # 미세먼지 값
-        try:
-            v = float(val) # 값을 실수형으로 변환 시도
-        except:
-            continue # 변환 실패 시 (예: 값이 '-'인 경우) 건너뜁니다.
+def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
+    """API 데이터에서 '시간'과 '농도 값'만 골라내어 정리하는 함수."""
+    times = [] # 시간 정보를 저장할 리스트
+    values = [] # 농도 값을 저장할 리스트
+    
+    for it in items: # 데이터 항목 반복 처리
+        t = it.get('dataTime') # 측정 시간 추출
+        val = it.get(key) # 농도 값 추출
+        
+        try: # 값 변환 시도
+            v = float(val) # 농도 값을 실수형으로 변환
+        except: # 변환 실패 시
+            continue # 다음 항목으로 건너뛰기
         
         dt = None
-        # 다양한 시간 형식 처리 시도 (API 데이터 형식 변화에 대비)
-        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y%m%d%H%M"):
+        for fmt in ("%Y-%m-%d %H:%M", "%Y%m%d%H%M"): # 시간 형식 반복 시도
             try:
-                dt = datetime.strptime(t, fmt) # 시간 문자열을 datetime 객체로 변환
-                break
+                dt = datetime.strptime(t, fmt) # datetime 객체로 변환
+                break # 성공 시 반복 중단
             except:
-                continue
+                continue # 실패 시 다음 형식 시도
         
-        if dt is None:
-            continue # 시간 파싱 실패 시 건너뜁니다.
+        if dt is None: # 시간 변환 최종 실패 시
+            continue # 다음 항목으로 건너뛰기
         
-        times.append(dt)
-        values.append(v)
+        times.append(dt) # 유효한 시간 추가
+        values.append(v) # 유효한 값 추가
         
-    return times[::-1], values[::-1] # API는 최신순으로 데이터를 주므로, 시간순서(오래된 순)로 반전하여 반환합니다.
+    return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
-def linear_regression_predict(values):
-    """선형 회귀를 사용하여 다음 시점의 값을 예측합니다."""
-    if len(values) < 3: # 최소 3개 이상의 데이터가 있어야 예측 가능
+def linear_regression_predict(values): # 선형 회귀 예측 함수
+    """선형 회귀 모델로 다음 1시간 뒤의 농도 값을 예측하는 함수."""
+    if len(values) < 3: # 데이터 부족 시 예측 불가
         return None
         
-    # X: 독립 변수 (데이터의 순서, 0, 1, 2, ...)
-    X = np.arange(len(values)).reshape(-1,1)
-    # y: 종속 변수 (미세먼지 농도 값)
-    y = np.array(values)
+    X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
+    y = np.array(values) # Y축(농도 값) 데이터 준비
     
-    # 선형 회귀 모델 훈련
-    model = LinearRegression().fit(X, y)
+    model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
-    # 다음 시점 (인덱스 len(values))의 값을 예측
-    pred = model.predict([[len(values)]])[0] 
-    return pred
+    pred = model.predict([[len(values)]])[0] # 다음 시점 값 예측
+    return pred # 예측값 반환
 
-# PM10 등급 기준 (한국 환경부 기준)
-PM10_CRITERIA = {
+# --- 미세먼지 등급 기준 정의 ---
+PM10_CRITERIA = { # PM10 기준 정의
     '좋음': (0, 30),
     '보통': (31, 80),
     '나쁨': (81, 150),
-    '매우 나쁨': (151, float('inf')) # 무한대
+    '매우 나쁨': (151, float('inf')) 
 }
-
-# PM2.5 등급 기준 (한국 환경부 기준)
-PM25_CRITERIA = {
+PM25_CRITERIA = { # PM2.5 기준 정의
     '좋음': (0, 15),
     '보통': (16, 35),
     '나쁨': (36, 75),
-    '매우 나쁨': (76, float('inf'))
+    '매우 나쁨': (76, float('inf')) 
 }
 
-def get_grade_criteria(pm_type):
-    """PM 타입에 맞는 기준(PM10 또는 PM2.5)을 반환합니다."""
-    return PM10_CRITERIA if pm_type == 'PM10' else PM25_CRITERIA
+def get_grade_criteria(pm_type): # 등급 기준 반환 함수
+    """'PM10'인지 'PM2.5'인지에 따라 알맞은 등급 기준 딕셔너리를 돌려줘."""
+    return PM10_CRITERIA if pm_type == 'PM10' else PM25_CRITERIA # 기준 딕셔너리 반환
 
-def recommend_by_value(val, pm_type='PM10'):
-    """PM 값과 타입에 따라 행동 추천 등급과 메시지를 반환합니다."""
+def recommend_by_value(val, pm_type='PM10'): # 행동 추천 메시지 함수
+    """농도 값에 따라 행동 추천 메시지를 돌려주는 함수."""
     if val is None:
-        return "예측값을 계산할 수 없습니다."
+        return "예측값을 계산할 수 없어." # 예측 불가 시 메시지
     
-    criteria = get_grade_criteria(pm_type)
+    criteria = get_grade_criteria(pm_type) # 해당 PM 타입의 기준 가져오기
         
-    # 매우 나쁨 기준
+    # 등급별 조건 확인 및 메시지 반환 (매우 나쁨부터 시작)
     if val >= criteria['매우 나쁨'][0]:
         return "🔥 매우 나쁨: 외출 자제, 실내 활동 권장"
-    # 나쁨 기준
     if val >= criteria['나쁨'][0]:
         return "⚠️ 나쁨: 장시간 외출 피하고 마스크 착용"
-    # 보통 기준
     if val >= criteria['보통'][0]:
         return "🙂 보통: 민감군은 주의, 가벼운 외출 가능"
         
-    # 좋음 기준
-    return "🌿 좋음: 외부 활동 안전"
+    return "🌿 좋음: 외부 활동 안전" # 좋음 등급 메시지
 
-# --- Streamlit UI 구성 ---
+# --- Streamlit 웹 화면(UI) 구성 시작 ---
 
-st.title("🌫️ 실시간 미세먼지 분석 + 예측")
-st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다.")
+st.title("🌫️ 실시간 미세먼지 분석 + 예측") # 웹 앱 제목
+st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 해.") # 설명 텍스트
 
-# 주요 도시/측정소 매핑 (전국 주요 지역 확장)
-AIR_STATION_MAP = {
+AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
     "서울": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
     "부산": ["대연동", "명장동", "학장동", "덕천동", "전포동", "광복동", "용호동", "장림동", "신평동", "해운대", "기장읍", "정관읍"],
     "대구": ["봉산동", "이현동", "지산동", "성서", "대명동", "복현동", "만촌동", "안심"],
@@ -202,180 +171,137 @@ AIR_STATION_MAP = {
     "제주": ["제주시", "서귀포"]
 }
 
-# 1. 시/도 선택 (드롭다운)
 default_city = "서울"
-city = st.selectbox("시/도 선택", list(AIR_STATION_MAP.keys()), 
+city = st.selectbox("시/도 선택", list(AIR_STATION_MAP.keys()), # 시/도 선택 드롭다운
                     index=list(AIR_STATION_MAP.keys()).index(default_city) if default_city in AIR_STATION_MAP else 0)
 
-# 2. 선택된 시/도에 따라 구/군 목록 업데이트
-district_options = AIR_STATION_MAP.get(city, [])
+district_options = AIR_STATION_MAP.get(city, []) # 선택된 시/도의 구/군 목록 가져오기
 
-# 3. 구/군 (측정소) 선택 (드롭다운)
-if district_options:
-    # 선택된 시/도의 첫 번째 항목을 기본값으로 설정
-    default_district_index = 0
-    gu = st.selectbox("구/군 (측정소) 선택", district_options, 
-                      index=default_district_index)
-else:
-    gu = st.text_input("구/군 (측정소) 입력 (목록 없음)", "")
-    st.warning("선택된 시/도에 대한 측정소 목록이 없습니다. 직접 입력해주세요.")
+if district_options: # 구/군 목록이 있을 경우
+    gu = st.selectbox("구/군 (측정소) 선택", district_options, index=0) # 구/군 선택 드롭다운
+else: # 구/군 목록이 없을 경우
+    gu = st.text_input("구/군 (측정소) 입력 (목록 없음)", "") # 수동 입력창
+    st.warning("선택된 시/도에 대한 측정소 목록이 없어. 직접 입력해.") # 경고 메시지
 
-# 4. PM10/PM2.5 선택
-pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0)
+pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0) # 측정 항목 라디오 버튼
 
-# 5. 데이터 조회 기간 선택
-data_range = st.selectbox("데이터 조회 기간", 
+data_range = st.selectbox("데이터 조회 기간", # 데이터 조회 기간 선택
                           ['최근 48시간', '지난 7일 (168시간)', '지난 30일 (720시간)'],
                           index=0)
     
-station = gu # 측정소 이름으로 사용
+station = gu # 측정소 이름 설정
 
-# [분석 시작] 버튼 클릭 시 실행
-if st.button("분석 시작", key="analyze_button"):
-    st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과") # 현재 위치 정보 표시
+if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 클릭 시
+    st.subheader(f"📊 {city} {gu} ({pm_type}) 분석 결과") # 분석 결과 부제목 출력
     
-    # PM 타입에 따라 API 요청 시 사용할 데이터 필드 이름 설정
-    data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value'
+    data_key = 'pm10Value' if pm_type == 'PM10' else 'pm25Value' # API 요청을 위한 데이터 키 설정
     
-    # 선택된 기간에 따라 API로 가져올 데이터 개수(num_rows) 설정
-    num_rows_to_fetch = 48 # 기본값
+    num_rows_to_fetch = 48 # 기본 요청 데이터 개수 설정
     if data_range == '지난 7일 (168시간)':
         num_rows_to_fetch = 168
     elif data_range == '지난 30일 (720시간)':
-        num_rows_to_fetch = 720 # API 제약(1000개) 미만으로 안전
+        num_rows_to_fetch = 720 
     
-    try:
-        # 데이터 로딩 스피너 표시
-        with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'):
-            items = fetch_air_data(station, num_rows=num_rows_to_fetch)
-        st.success("데이터 불러오기 성공!")
-    except requests.HTTPError:
-        st.error("데이터 요청 중 HTTP 오류가 발생했습니다. 지역명 또는 API 키를 확인하세요.")
-        st.stop() # 오류 발생 시 코드 실행 중단
-    except Exception as e:
-        st.error(f"데이터 요청 중 오류 발생: {e}")
-        st.stop() # 오류 발생 시 코드 실행 중단
+    try: # 데이터 요청 및 오류 처리
+        with st.spinner(f'데이터 ({num_rows_to_fetch}개) 불러오는 중...'): # 로딩 스피너 표시
+            items = fetch_air_data(station, num_rows=num_rows_to_fetch) # 데이터 가져오기
+        st.success("데이터 불러오기 성공!") # 성공 메시지
+    except requests.HTTPError: # HTTP 오류 처리
+        st.error("데이터 요청 중 HTTP 오류가 발생했어. 지역명 또는 API 키를 확인해.")
+        st.stop() # 프로그램 중지
+    except Exception as e: # 기타 오류 처리
+        st.error(f"데이터 요청 중 예상치 못한 오류 발생: {e}")
+        st.stop() 
 
-    # 불러온 데이터 파싱 (시간과 값 분리)
-    times, values = parse_pm(items, key=data_key)
+    times, values = parse_pm(items, key=data_key) # 데이터 파싱
 
-    if not values:
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없습니다. 지역명을 다시 확인해주세요.")
-        st.stop()
+    if not values: # 유효한 데이터가 없을 경우
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 없어. 지역명을 다시 확인해.")
+        st.stop() # 프로그램 중지
         
-    # 선형 회귀 예측 실행 조건 (단기 조회 시에만)
-    if num_rows_to_fetch <= 48:
-        predict = linear_regression_predict(values)
-    else:
+    if num_rows_to_fetch <= 48: # 단기 조회 시 예측 실행
+        predict = linear_regression_predict(values) # 예측값 계산
+    else: # 장기 조회 시 예측 비활성화
         predict = None
-        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화됩니다. (선형 회귀는 단기 예측에 더 적합합니다)")
+        st.warning("장기 데이터 조회 시에는 예측 기능이 비활성화돼.")
 
-
-    # --- Matplotlib 시각화 ---
-    # 그래프 크기를 (14, 7)로 설정하여 가시성 확보
-    fig, ax = plt.subplots(figsize=(14, 7))
-    criteria = get_grade_criteria(pm_type)
+    fig, ax = plt.subplots(figsize=(14, 7)) # 그래프 영역 설정
+    criteria = get_grade_criteria(pm_type) # 등급 기준 가져오기
     
-    # 1. 미세먼지 등급별 배경 색상 (기준선) 추가
-    # '좋음' 영역 (초록)
+    # 등급별 배경색 영역 표시 (좋음, 보통, 나쁨)
     ax.axhspan(criteria['좋음'][0], criteria['좋음'][1], facecolor='green', alpha=0.1, label='좋음')
-    # '보통' 영역 (노랑)
     ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
-    # '나쁨' 영역 (주황)
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
-    # Y축 최대값 계산 및 설정
-    max_val = max(values) if values else 0
-    # 최대값 또는 '매우 나쁨' 기준 중 큰 값의 1.5배를 최대 Y축으로 설정하여 여유 공간 확보
-    y_max_limit = max(max_val, criteria['매우 나쁨'][0]) * 1.5
+    max_val = max(values) if values else 0 # 데이터 최대값
+    y_max_limit = max(max_val, criteria['매우 나쁨'][0]) * 1.5 # Y축 최대 범위 설정
     
-    ax.set_ylim(0, y_max_limit) # Y축 범위 설정
+    ax.set_ylim(0, y_max_limit) # Y축 범위 적용
     
-    # '매우 나쁨' 영역 (빨강)
-    ax.axhspan(criteria['매우 나쁨'][0], y_max_limit, facecolor='red', alpha=0.1, label='매우 나쁨')
-
+    ax.axhspan(criteria['매우 나쁨'][0], y_max_limit, facecolor='red', alpha=0.1, label='매우 나쁨') # 매우 나쁨 영역 표시
 
     ax.set_facecolor('#f9f9f9') # 그래프 배경색 설정
-    ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1) # 그리드 라인 설정
+    ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1) # 그리드 선 추가
     
-    # 실측 데이터 플롯 (파란색 선과 원형 마커)
-    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}')
+    ax.plot(times, values, color='#2a4d8f', marker='o', linewidth=2, label=f'실측 {pm_type}') # 실측 데이터 선 그래프
     
-    # 데이터 포인트 위에 값 표시 (48시간 조회 시에만 표시하여 그래프 혼잡도 줄임)
-    if num_rows_to_fetch <= 48:
+    if num_rows_to_fetch <= 48: # 단기 조회 시 값 텍스트 표시
         for x, y in zip(times, values):
-            # 텍스트 위치를 값보다 약간 위 (y + 1.5)에 표시
-            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
+            ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center') # 각 점 위에 농도 값 표시
 
-    # 예측값 플롯 (주황색 점선과 원형 마커)
-    if predict is not None:
-        next_time = times[-1] + timedelta(hours=1) # 다음 1시간 후 시간 계산
-        ax.plot([times[-1], next_time], # 현재 마지막 시간과 예측 시간
-                [values[-1], predict], # 현재 마지막 값과 예측값
+    if predict is not None: # 예측값이 있을 경우
+        next_time = times[-1] + timedelta(hours=1) # 예측 시간 (마지막 시간 + 1시간)
+        ax.plot([times[-1], next_time], 
+                [values[-1], predict], 
                 color='#f28500', marker='o', linestyle='--', linewidth=2, 
-                label=f'예측값: {predict:.1f}')
-        # 예측값 위에 텍스트 표시
-        ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center')
+                label=f'예측값: {predict:.1f}') # 예측값 점선으로 표시
+        ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center') # 예측값 텍스트 표시
 
-    # X축 눈금 설정 (기간에 따라 간격 조정)
+    # X축 눈금 간격 설정
     if num_rows_to_fetch <= 48:
-        xtick_interval = 2 # 48시간: 2시간 간격
+        xtick_interval = 2 # 2시간 간격
     elif num_rows_to_fetch <= 168:
-        xtick_interval = 12 # 7일: 12시간 간격
+        xtick_interval = 12 # 12시간 간격
     else:
-        xtick_interval = 24 # 30일: 24시간 간격 (일 단위)
+        xtick_interval = 24 # 24시간 간격
 
-    # 설정된 간격에 따라 눈금 시간 및 레이블 생성
-    tick_indices = np.arange(0, len(times), xtick_interval)
-    tick_times = [times[i] for i in tick_indices if i < len(times)]
+    tick_indices = np.arange(0, len(times), xtick_interval) # 눈금 인덱스 계산
+    tick_times = [times[i] for i in tick_indices if i < len(times)] # 눈금 시간 객체 추출
     
+    # X축 눈금 레이블 형식 설정
     if num_rows_to_fetch <= 48:
-        tick_labels = [t.strftime("%m-%d %H:%M") for t in tick_times] # 48시간: 월-일 시:분
+        tick_labels = [t.strftime("%m-%d %H:%M") for t in tick_times] # 월-일 시:분
     else:
-        tick_labels = [t.strftime("%Y-%m-%d") for t in tick_times] # 장기: 년-월-일
+        tick_labels = [t.strftime("%Y-%m-%d") for t in tick_times] # 년-월-일
 
     ax.set_xticks(tick_times) # X축 눈금 위치 설정
-    ax.set_xticklabels(tick_labels, rotation=45) # X축 레이블과 회전 각도 설정
+    ax.set_xticklabels(tick_labels, rotation=45) # X축 레이블 표시 및 45도 회전
 
-    # 그래프 제목 추가 (위치, 타입 정보 포함)
-    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이', fontsize=16, pad=20)
+    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이', fontsize=16, pad=20) # 그래프 제목
+    ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)") # Y축 레이블
+    ax.set_xlabel("측정 시간") # X축 레이블
     
-    # Y축 레이블 설정 (PM 타입에 따라 변경)
-    ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)")
-    ax.set_xlabel("측정 시간") # X축 레이블 추가
-    
-    # 범례 설정 (그래프 오른쪽 상단 바깥에 위치하도록 조정)
-    if font_prop:
-        # loc='upper left'와 bbox_to_anchor=(1.01, 1)로 오른쪽 상단 바깥에 위치시킴
-        ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.01, 1), borderaxespad=0.)
+    if font_prop: # 폰트 속성이 있으면
+        ax.legend(loc='upper left', frameon=True, prop=font_prop, bbox_to_anchor=(1.01, 1), borderaxespad=0.) # 범례 표시 (한글 폰트 적용)
     else:
-        ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.01, 1), borderaxespad=0.) 
+        ax.legend(loc='upper left', frameon=True, bbox_to_anchor=(1.01, 1), borderaxespad=0.) # 범례 표시 (기본 폰트)
         
-    # 범례가 잘리지 않도록 그래프의 오른쪽 여백을 수동으로 확보 (0.8은 오른쪽에서 20% 여백을 남긴다는 의미)
-    plt.subplots_adjust(right=0.8)
+    plt.subplots_adjust(right=0.8) # 그래프 오른쪽 여백 조정
 
-    st.pyplot(fig) # Streamlit에 그래프 표시
+    st.pyplot(fig) # 그래프를 Streamlit에 출력
     
-    # --- 실측 데이터 테이블 표시 ---
-    if times and values:
-        st.subheader("📋 실측 데이터 테이블")
-        
-        # Streamlit의 st.dataframe을 사용해 데이터를 표로 깔끔하게 표시
-        data_to_display = {
+    if times and values: # 실측 데이터가 있을 경우
+        st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
+        data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values] # 소수점 첫째 자리까지 표시
+            f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
-        
-        # 표를 화면 너비에 맞게 표시
-        st.dataframe(data_to_display, use_container_width=True)
+        st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
 
-    # --- 예측 결과 표시 ---
-    st.subheader("📌 예측 결과")
-    if predict is not None:
-        # 예측값과 PM 타입을 함께 출력
-        st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**")
-        # 예측값에 따른 행동 추천 메시지 출력
-        st.info(recommend_by_value(predict, pm_type=pm_type))
-    else:
-        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없습니다.")
+    st.subheader("📌 예측 결과") # 예측 결과 부제목
+    if predict is not None: # 예측값이 있을 경우
+        st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 예측 농도 값 출력
+        st.info(recommend_by_value(predict, pm_type=pm_type)) # 행동 추천 메시지 출력
+    else: # 예측값이 없을 경우
+        st.warning("데이터 부족 또는 장기 조회로 인해 예측값을 계산할 수 없어.") # 경고 메시지
