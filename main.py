@@ -1,4 +1,4 @@
-import requests # HTTP 요청 라이브러리
+ㅍimport requests # HTTP 요청 라이브러리
 import json # JSON 파싱 라이브러리
 import matplotlib.pyplot as plt # 그래프 시각화 모듈
 import numpy as np # 숫자 배열 및 계산 모듈 (np로 통일)
@@ -48,7 +48,7 @@ font_prop = set_korean_font() # 폰트 설정 함수 실행
 # --- 미세먼지 공공 데이터 API 키 ---
 API_KEY = "aea45d5692f9dc0fb20ff49e2cf104f6614d3a17df9e92420974a5defb3cd75e" # API 인증 키
 
-def fetch_air_data(station_name, num_rows=24): # API 데이터 요청 함수 (기본값 24시간으로 변경)
+def fetch_air_data(station_name, num_rows=24): # API 데이터 요청 함수 (기본값 24시간)
     """주어진 '측정소 이름'의 미세먼지 데이터를 API로 요청하고 받아오는 함수."""
     URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty" # API 엔드포인트 URL
     params = { # API 요청에 필요한 파라미터 설정
@@ -99,18 +99,25 @@ def parse_pm(items, key='pm10Value'): # 데이터 파싱 및 정제 함수
         
     return times[::-1], values[::-1] # 시간 순서대로 뒤집어 반환
 
-def linear_regression_predict(values): # 선형 회귀 예측 함수
-    """선형 회귀 모델로 다음 1시간 뒤의 농도 값을 예측하는 함수."""
+def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 예측 함수
+    """선형 회귀 모델로 다음 n_hours 시간 뒤의 농도 값들을 예측하고, 해당 시간대 리스트와 함께 반환하는 함수."""
     if len(values) < 3: # 데이터 부족 시 예측 불가
-        return None
+        return None, None, None
         
     X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
     y = np.array(values) # Y축(농도 값) 데이터 준비
     
     model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
-    pred = model.predict([[len(values)]])[0] # 다음 시점 값 예측
-    return pred # 예측값 반환
+    # Predict n_hours points (T+1, T+2, ..., T+n)
+    X_pred = np.arange(len(values), len(values) + n_hours).reshape(-1, 1)
+    predict_values = model.predict(X_pred)
+    
+    # Calculate the future times
+    last_time = times[-1]
+    predict_times = [last_time + timedelta(hours=i) for i in range(1, n_hours + 1)]
+    
+    return predict_values, predict_times, model # 예측값 배열, 예측 시간 배열, 모델 객체 반환
 
 # --- 미세먼지 등급 기준 정의 ---
 PM10_CRITERIA = { # PM10 기준 정의
@@ -150,7 +157,7 @@ def recommend_by_value(val, pm_type='PM10'): # 행동 추천 메시지 함수
 # --- Streamlit 웹 화면(UI) 구성 시작 ---
 
 st.title("🌫️ 실시간 미세먼지 분석 + 예측 (최근 24시간)") # 웹 앱 제목 수정
-st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다다.") # 설명 텍스트
+st.markdown("정부 공공데이터 포털의 실시간 미세먼지 데이터를 기반으로 합니다다. **예측은 향후 3시간을 기준으로 합니다.**") # 설명 텍스트
 
 AIR_STATION_MAP = { # 시/도별 측정소 목록 정의
     "서울": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
@@ -186,16 +193,10 @@ else: # 구/군 목록이 없을 경우
 
 pm_type = st.radio("측정 항목 선택", ('PM10', 'PM2.5'), index=0) # 측정 항목 라디오 버튼
 
-# === 데이터 조회 기간 옵션 단순화 (24시간만) ===
-# data_range = st.selectbox("데이터 조회 기간", 
-#                           ['최근 24시간'],
-#                           index=0)
-# st.info("데이터 조회 기간은 '최근 24시간'으로 고정됩니다.") # 고정되었다는 안내 메시지 추가
-
-# 데이터 조회 기간 선택 UI를 제거하고 24시간으로 고정
+# 데이터 조회 기간은 '최근 24시간'으로 고정
 num_rows_to_fetch = 24
-# ===============================================
-    
+n_forecast_hours = 3 # 예측 시간: 3시간으로 확장
+
 station = gu # 측정소 이름 설정
 
 if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 클릭 시
@@ -216,17 +217,19 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
 
     times, values = parse_pm(items, key=data_key) # 데이터 파싱
 
-    # <<< 데이터 처리 개수 확인 메시지 추가 >>>
+    # 데이터 처리 개수 확인 메시지
     if items:
         st.info(f"요청한 데이터는 {num_rows_to_fetch}개, 실제 처리된 유효 데이터 포인트는 **{len(values)}**개입니다.")
-    # <<< 메시지 추가 끝 >>>
     
-    if not values or len(values) < 3: # 유효한 데이터가 부족할 경우
-        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
+    # 예측 실행
+    predict_values, predict_times, model = linear_regression_predict(times, values, n_hours=n_forecast_hours)
+
+    if predict_values is None:
         predict = None
+        st.warning(f"측정소 '{station}'에 대한 유효한 {pm_type} 데이터가 너무 적습니다. 예측은 불가능합니다.")
     else:
-        # 24시간 데이터에 대해 예측 실행
-        predict = linear_regression_predict(values) # 예측값 계산
+        # 최종 예측값 (T+3)을 추천 기준으로 사용
+        predict = predict_values[-1]
 
 
     fig, ax = plt.subplots(figsize=(12,7)) # 그래프 영역 설정
@@ -238,7 +241,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
     max_val = max(values) if values else 0 # 데이터 최대값
-    y_max_limit = max(max_val, criteria['매우 나쁨'][0]) * 1.5 # Y축 최대 범위 설정
+    y_max_limit = max(max_val * 1.2, criteria['매우 나쁨'][0] * 1.2) # Y축 최대 범위 설정 (넉넉하게)
     
     ax.set_ylim(0, y_max_limit) # Y축 범위 적용
     
@@ -258,15 +261,21 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         except:
             pass
 
-    if predict is not None: # 예측값이 있을 경우
-        next_time = times[-1] + timedelta(hours=1) # 예측 시간 (마지막 시간 + 1시간)
-        ax.plot([times[-1], next_time], 
-                [values[-1], predict], 
+    if predict_values is not None: # 예측값이 있을 경우
+        # Combine the last real point with the predicted points for plotting
+        plot_times = [times[-1]] + predict_times
+        plot_values = [values[-1]] + list(predict_values)
+        
+        ax.plot(plot_times, plot_values, 
                 color='#f28500', marker='o', linestyle='--', linewidth=2, 
-                label=f'예측값: {predict:.1f}') # 예측값 점선으로 표시
-        ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center') # 예측값 텍스트 표시
+                label=f'향후 {n_forecast_hours}시간 예측') 
 
-    # === X축 눈금 간격 설정 (24시간 데이터에 대해 2시간 간격으로 고정) ===
+        # Display the final predicted value text (T+3)
+        final_time = predict_times[-1]
+        final_value = predict_values[-1]
+        ax.text(final_time, final_value + 1.5, f"{final_value:.0f}", color='#f28500', fontsize=8, ha='center')
+
+    # X축 눈금 간격 설정 (24시간 데이터에 대해 2시간 간격으로 고정)
     xtick_interval = 2 # 2시간 간격
         
     tick_indices = np.arange(0, len(times), xtick_interval) # 눈금 인덱스 계산
@@ -279,16 +288,19 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.set_xticklabels(tick_labels, rotation=45) # X축 레이블 표시 및 45도 회전
     
     # === X축 범위 강제 설정 ===
-    if times:
-        end_time = times[-1] # 마지막 측정 시간
-        # 요청한 데이터 수 만큼의 시간 범위를 시작점으로 계산
-        start_time = end_time - timedelta(hours=num_rows_to_fetch - 1) 
+    if times and predict_times:
+        start_time = times[0] # 첫 측정 시간
+        end_time = predict_times[-1] # 마지막 예측 시간 (T+3)
         
-        # X축 범위를 명시적으로 설정하여 그래프가 요청된 전체 기간을 표시하도록 강제합니다.
+        # X축 범위를 명시적으로 설정하여 실측+예측 기간 전체를 표시합니다.
         ax.set_xlim(start_time, end_time) 
+    elif times:
+         start_time = times[0]
+         end_time = times[-1]
+         ax.set_xlim(start_time, end_time)
     # ========================
 
-    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이 (최근 24시간)', fontsize=16, pad=20) # 그래프 제목
+    ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이 (24시간 실측 + 3시간 예측)', fontsize=16, pad=20) # 그래프 제목
     ax.set_ylabel(f"{pm_type} 농도 (㎍/m³)") # Y축 레이블
     ax.set_xlabel("측정 시간") # X축 레이블
     
@@ -310,9 +322,12 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
 
 
-    st.subheader("📌 예측 결과") # 예측 결과 부제목
+    st.subheader("📌 예측 결과 (향후 3시간)") # 예측 결과 부제목
     if predict is not None: # 예측값이 있을 경우
-        st.markdown(f"다음 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 예측 농도 값 출력
+        st.markdown(f"**최종 예측 시간 ({predict_times[-1].strftime('%Y-%m-%d %H:%M')})**의 {pm_type} 예측값: **{predict:.1f} ㎍/m³**") # 최종 예측 농도 값 출력
+        
+        st.markdown("---")
+        st.markdown(f"**3시간 뒤 ({predict_times[-1].strftime('%H:%M')}) 예측 기준**")
         st.info(recommend_by_value(predict, pm_type=pm_type)) # 행동 추천 메시지 출력
     else: # 예측값이 없을 경우
         st.warning("데이터 부족으로 인해 예측값을 계산할 수 없습니다.") # 경고 메시지
