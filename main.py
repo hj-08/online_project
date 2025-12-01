@@ -322,9 +322,9 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         # X축 범위를 명시적으로 설정하여 실측+예측 기간 전체를 표시합니다.
         ax.set_xlim(start_time, end_time) 
     elif times:
-         start_time = times[0]
-         end_time = times[-1]
-         ax.set_xlim(start_time, end_time)
+          start_time = times[0]
+          end_time = times[-1]
+          ax.set_xlim(start_time, end_time)
     # ========================
 
     ax.set_title(f'{city} {gu} ({pm_type}) 시간대별 농도 변화 추이 (24시간 실측 + 3시간 예측)', fontsize=16, pad=20) # 그래프 제목
@@ -344,7 +344,7 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            # --- 버그 수정 지점 (TypeError 방지) ---
+            # 🐛 버그 해결된 224번째 줄 
             # 값이 숫자(int/float)일 경우에만 소수점 포맷을 적용하고, 그렇지 않으면 문자열 그대로 사용합니다.
             f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" if isinstance(v, (int, float)) else str(v) for v in values]
         }
