@@ -1,4 +1,4 @@
-ㅍimport requests # HTTP 요청 라이브러리
+import requests # HTTP 요청 라이브러리
 import json # JSON 파싱 라이브러리
 import matplotlib.pyplot as plt # 그래프 시각화 모듈
 import numpy as np # 숫자 배열 및 계산 모듈 (np로 통일)
