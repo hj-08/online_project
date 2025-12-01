@@ -112,9 +112,13 @@ def linear_regression_predict(times, values, n_hours=3): # 선형 회귀 다중 
     if len(values) < 3: # 데이터 부족 시 예측 불가
         return None, None, None
         
-    X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
-    # ERROR_VAL이 values에 있을 경우, 여기서 TypeError 또는 ValueError가 발생할 수 있습니다.
-    y = np.array(values) # Y축(농도 값) 데이터 준비 
+    try: # 비숫자 값(예: "ERROR_VAL")이 포함되어 ValueError가 발생할 경우를 처리합니다.
+        X = np.arange(len(values)).reshape(-1,1) # X축(시간 인덱스) 데이터 준비
+        # ERROR_VAL이 values에 있을 경우, 여기서 TypeError 또는 ValueError가 발생할 수 있습니다.
+        y = np.array(values) # Y축(농도 값) 데이터 준비 
+    except ValueError:
+        st.warning("경고: 예측 데이터에 비숫자 값(API 오류)이 포함되어 예측을 건너뜁니다.")
+        return None, None, None # 예측 불가능 상태 반환
     
     model = LinearRegression().fit(X, y) # 선형 회귀 모델 학습
     
@@ -252,8 +256,9 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     ax.axhspan(criteria['보통'][0], criteria['보통'][1], facecolor='yellow', alpha=0.1, label='보통')
     ax.axhspan(criteria['나쁨'][0], criteria['나쁨'][1], facecolor='orange', alpha=0.1, label='나쁨')
     
-    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생합니다.
-    max_val = max(values) if values else 0 # 데이터 최대값
+    # ERROR_VAL이 포함되어 있으면 여기서 TypeError가 발생합니다. -> max() 함수 전에 숫자인 값만 필터링합니다.
+    numeric_values = [v for v in values if isinstance(v, (int, float))] # 숫자 값만 필터링
+    max_val = max(numeric_values) if numeric_values else 0 # 필터링된 데이터의 최대값
     # 예측값 중 최대값도 포함하여 Y축 최대 범위를 계산
     if predict_values is not None and len(predict_values) > 0:
         max_pred_val = max(predict_values)
@@ -336,7 +341,8 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
         st.subheader("📋 실측 데이터 테이블") # 테이블 부제목
         data_to_display = { # 데이터 프레임용 딕셔너리
             "측정 시간": [t.strftime("%Y-%m-%d %H:%M") for t in times],
-            # ERROR_VAL이 포함되어 있으면 여기서 에러가 발생하여 이 부분이 실행되지 않을 수 있습니다.
+            # !!! 데이터 테이블 표시 버그 유발 지점 !!!
+            # ERROR_VAL이 포함되어 있을 때, f"{v:.1f}"에서 문자열을 실수로 포맷하려고 하여 TypeError가 발생합니다.
             f"{pm_type} 농도 (㎍/m³)": [f"{v:.1f}" for v in values]
         }
         st.dataframe(data_to_display, use_container_width=True) # 데이터 프레임 출력
@@ -345,14 +351,17 @@ if st.button("분석 시작", key="analyze_button"): # '분석 시작' 버튼 �
     st.subheader("📌 예측 결과 (향후 3시간)") # 예측 결과 부제목
     
     if predict_values is not None and values: # 예측값과 실측값이 모두 있을 경우
-        last_value = values[-1] # 직전 측정값
-        st.markdown(f"**직전 측정값 ({times[-1].strftime('%H:%M')})**: **{last_value:.1f} ㎍/m³**")
+        # 안전한 계산을 위해 숫자 값만 필터링합니다. (테이블 에러와 별개)
+        last_numeric_value = [v for v in values if isinstance(v, (int, float))][-1]
+        last_time = times[-1]
+        
+        st.markdown(f"**직전 측정값 ({last_time.strftime('%H:%M')})**: **{last_numeric_value:.1f} ㎍/m³**")
         st.markdown("---")
         
         for i in range(n_forecast_hours):
             current_time = predict_times[i]
             predicted_value = predict_values[i]
-            change = predicted_value - last_value
+            change = predicted_value - last_numeric_value
             
             # 변화량에 따른 아이콘과 색상 설정
             if change > 0.5: # 0.5 초과 시 증가
