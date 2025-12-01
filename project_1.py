@@ -202,7 +202,8 @@ if st.button("분석 시작", key="analyze_button"):
     predict = linear_regression_predict(values)
 
     # --- Matplotlib 시각화 ---
-    fig, ax = plt.subplots(figsize=(10, 4))
+    # 그래프 크기를 (12, 6)으로 키움
+    fig, ax = plt.subplots(figsize=(12, 6))
 
     ax.set_facecolor('#f9f9f9')
     ax.grid(True, color='#e1e1e1', linestyle='-', linewidth=1)
@@ -212,7 +213,8 @@ if st.button("분석 시작", key="analyze_button"):
     
     # 데이터 포인트 위에 값 표시
     for x, y in zip(times, values):
-        ax.text(x, y + 1, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
+        # 숫자가 겹치지 않도록 Y축 상단에 텍스트를 배치
+        ax.text(x, y + 1.5, f"{y:.0f}", color='#2a4d8f', fontsize=8, ha='center')
 
     # 예측값 플롯
     if predict is not None:
@@ -221,11 +223,11 @@ if st.button("분석 시작", key="analyze_button"):
                 [values[-1], predict],
                 color='#f28500', marker='o', linestyle='--', linewidth=2, 
                 label=f'예측값: {predict:.1f}')
-        ax.text(next_time, predict + 1, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center')
+        ax.text(next_time, predict + 1.5, f"{predict:.0f}", color='#f28500', fontsize=8, ha='center')
 
-    # X축 눈금 설정 (6시간 간격)
-    ax.set_xticks(times[::6])
-    ax.set_xticklabels([t.strftime("%m-%d %H:%M") for t in times[::6]], rotation=45)
+    # X축 눈금 설정 (2시간 간격)
+    ax.set_xticks(times[::2])
+    ax.set_xticklabels([t.strftime("%m-%d %H:%M") for t in times[::2]], rotation=45)
 
     # Y축 레이블 설정
     ax.set_ylabel("PM10 (㎍/m³)")
