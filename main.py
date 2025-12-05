@@ -127,44 +127,53 @@ def parse_pm(items, key='pm10Value'):
 
 # ===== 선형 회귀 예측 함수 =====
 def linear_regression_predict(times, values, n_hours=3):
-    """
-    numeric_values(숫자형 값들)만 사용해 선형회귀 모델을 학습하고
-    향후 n_hours(기본 3) 시간에 대한 예측값(predict_values)과 예측 시간 리스트(predict_times)를 반환.
-    - 반환: (predict_values, predict_times, model)
-    - 중요: values 리스트에 숫자가 아닌 값("ERROR_VAL" 같은)이 포함되어 있으면
-      numeric_values에는 필터되어 제외됨. 이 때문에 times와 numeric_values의 길이가 다를 수 있음.
-    """
-    # 숫자인 값만 골라냄 (int 또는 float)
+    
+    # values 중에서 숫자(int, float)만 골라서 새 리스트에 담기
+    # → ERROR_VAL 같은 글자는 제거됨
     numeric_values = [v for v in values if isinstance(v, (int, float))]
 
-    # 데이터가 너무 적으면 예측 불가
+    # 만약 숫자가 너무 적으면(3개 미만) 예측 모델을 만들 수 없음
     if len(numeric_values) < 3:
         return None, None, None
 
     try:
-        # X는 0,1,2,... 인덱스 (과거->최근 순)
+        # X는 숫자의 개수만큼 0,1,2,... 증가하는 번호
+        # 예: 값이 5개면 X = [[0],[1],[2],[3],[4]]
+        # 선형회귀 모델은 이렇게 '번호'를 기준으로 패턴을 찾는다
         X = np.arange(len(numeric_values)).reshape(-1,1)
+
+        # y는 실제 숫자 데이터 (미세먼지 값 등)
         y = np.array(numeric_values)
+
     except ValueError:
-        # 데이터 준비 중 문제가 발생하면 예측 취소
-        st.warning("경고: 예측 데이터 준비 중 오류가 발생했습니다. 예측을 건너뜕니다.")
+        # 만약 배열을 만드는 도중 오류가 나면 예측을 할 수 없음
+        st.warning("경고: 예측 데이터 준비 중 오류가 발생했습니다. 예측을 건너뜁니다.")
         return None, None, None
 
-    model = LinearRegression().fit(X, y)  # 학습
+    # 선형 회귀 모델 학습 (X → y 관계를 공부함)
+    model = LinearRegression().fit(X, y)
 
-    # 예측할 X 범위 생성: len(...)부터 len(...)+n_hours-1 까지
+    # 앞으로 n_hours 만큼 미래를 예측하기 위해
+    # 예측할 X 번호를 새로 만듦
+    # 예: 기존 데이터가 5개면 예측 X = [5,6,7] (3시간 예측 기준)
     X_pred = np.arange(len(numeric_values), len(numeric_values) + n_hours).reshape(-1, 1)
+
+    # 위의 번호(X_pred)에 대해 모델이 예측한 값
     predict_values = model.predict(X_pred)
 
-    # 예측 결과가 음수가 되지 않도록 최소 1.0 적용
+    # 혹시 예측값이 너무 작게 나와서 음수가 되면 의미가 없으니
+    # 최소값을 1로 맞춰줌
     predict_values = np.maximum(1.0, predict_values)
 
-    # 마지막 실측 시간을 기준으로 예측 시간 생성
-    # 주의: times 리스트에는 ERROR_VAL이 껴 있을 수 있으므로 times[-1]이 항상 마지막 numeric 값의 시간과 정확히 맞지 않을 수 있음.
+    # 예측 시간이 언제인지 계산하기
+    # times 리스트의 마지막 시간을 기준으로
+    # +1시간, +2시간, ... 식으로 예측 시간을 만든다
     last_time = times[-1]
     predict_times = [last_time + timedelta(hours=i) for i in range(1, n_hours + 1)]
 
+    # 예측값 / 예측시간 / 학습된 모델을 반환
     return predict_values, predict_times, model
+
 
 # ===== 등급 기준 및 유틸 함수들 =====
 PM10_CRITERIA = {
