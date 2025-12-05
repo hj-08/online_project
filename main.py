@@ -76,54 +76,54 @@ def fetch_air_data(station_name, num_rows=24):
     items = data['response']['body']['items']
     return items
 
-# ===== 데이터 파싱 함수 =====
 def parse_pm(items, key='pm10Value'):
-    """
-    API에서 받은 items 리스트에서 '측정시간(dataTime)'과 해당 pm 값을 추출해
-    시간 리스트(times)와 값 리스트(values)를 반환.
-    - key: 'pm10Value' 또는 'pm25Value' 등
-    - 반환 전 리스트는 시간 순서(오래된 -> 최신)로 뒤집혀 최종 반환됨.
-    - NOTE: 코드에는 '의도적 오류 주입'이 포함되어 있음 (첫 유효 값에 "ERROR_VAL"을 넣음).
-      -> 이 부분은 실제로는 제거해야 함(아래에서 표시).
-    """
-    times = []
-    values = []
+    # API에서 받은 데이터(items)에서
+    # - 측정 시간(dataTime)
+    # - PM 값(pm10Value 또는 pm25Value)
+    # 두 가지를 뽑아 리스트로 만들어 반환
 
-    error_injected = False  # (의도적) 오류 주입 플래그
+    times = []    # 시간이 저장될 리스트
+    values = []   # 측정값이 저장될 리스트
+    error_injected = False  # 테스트용 오류 한 번만 넣기
 
     for it in items:
-        t = it.get('dataTime')  # 측정 시각 문자열 예: "2025-12-05 20:00"
-        val = it.get(key)       # pm 값(문자열 또는 None)
+        t = it.get('dataTime')   # 예: "2025-12-05 20:00"
+        val = it.get(key)        # 예: "35", "-", None 등
 
+        # PM 값을 숫자로 바꾸기
         try:
-            v = float(val)  # 문자열을 float로 변환 시도
-            # === 의도적 버그: 첫 유효 데이터에 문자열 삽입 ===
+            v = float(val)
+
+            # 테스트용: 첫 번째 정상 데이터에 일부러 문자열 삽입
+            # 실제 서비스에서는 반드시 제거해야 하는 부분
             if not error_injected:
-                 v = "ERROR_VAL"  # 숫자 대신 문자열을 넣음 -> 이후 타입 에러 유발
-                 error_injected = True
-            # === 버그 끝 ===
+                v = "ERROR_VAL"   # 일부러 숫자가 아닌 값을 넣어 오류 유도
+                error_injected = True
+
         except:
-            # 변환 불가(예: None, '-', '')이면 건너뜀
+            # 숫자로 바꿀 수 없는 경우(예: '-', '', None)는 무시하고 넘어가기
             continue
 
-        # 시간 문자열을 datetime으로 파싱 (두 포맷을 시도)
+        # 시간 문자열을 datetime으로 바꾸기 (두 가지 형식을 시도)
         dt = None
         for fmt in ("%Y-%m-%d %H:%M", "%Y%m%d%H%M"):
             try:
                 dt = datetime.strptime(t, fmt)
-                break
+                break   # 성공하면 멈춤
             except:
-                continue
+                continue  # 실패하면 다음 형식 시도
 
+        # 어떤 형식에도 맞지 않으면 시간 정보가 없으므로 건너뛰기
         if dt is None:
-            # 시간 포맷이 예상과 다르면 해당 항목을 무시
             continue
 
+        # 최종적으로 시간과 값 추가
         times.append(dt)
         values.append(v)
 
-    # items는 최신->과거 순서일 수 있으니 뒤집어서 오래된->최신으로 맞춤
+    # 반환 전에 리스트를 오래된 순서 → 최신 순서로 뒤집어 정렬
     return times[::-1], values[::-1]
+
 
 # ===== 선형 회귀 예측 함수 =====
 def linear_regression_predict(times, values, n_hours=3):
